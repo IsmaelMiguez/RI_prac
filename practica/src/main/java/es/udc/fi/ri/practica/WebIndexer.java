@@ -8,7 +8,7 @@ import java.util.Date;
 
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
-import org.apache.lucene.demo.knn.KnnVectorDict;
+//import org.apache.lucene.demo.knn.KnnVectorDict;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.IndexWriter;
@@ -20,20 +20,38 @@ import org.apache.lucene.util.IOUtils;
 
 import es.udc.fi.ri.practica.WebIndexer;
 
+//serverpoolthread clase java para el multihilo
+//cliente http.HttpClient
+// libreria jsoup para el procesado de los html 
+//
+
+
 public class WebIndexer implements AutoCloseable {
 	
 	public static void main(String[] args) throws Exception {
 	    String usage =
 	        "java org.apache.lucene.demo.IndexFiles"
-	            + " [-index INDEX_PATH] [-docs DOCS_PATH] [-update] [-knn_dict DICT_PATH]\n\n"
+	            + " [-index INDEX_PATH] [-docs DOCS_PATH] [-create] [-numThreads] [-h] [-p] [-titleTermVectors] [-bodyTermVectors] [-analyzer]  \n\n"
 	            + "This indexes the documents in DOCS_PATH, creating a Lucene index"
-	            + "in INDEX_PATH that can be searched with SearchFiles\n"
-	            + "IF DICT_PATH contains a KnnVector dictionary, the index will also support KnnVector search";
+	            + "in INDEX_PATH that can be searched with SearchFiles\n";
+	   
 	    String INDEX_PATH = "index";
 	    String DOCS_PATH = null;
-	    String vectorDictSource = null;
-	    Integer numThreads = null;
-	    boolean CREATE = true;
+	    boolean create = false;
+	    int numThreads = Runtime.getRuntime().availableProcessors();
+	    boolean infoThread= false;
+	    boolean infoIndex=false;
+	    boolean title=false;
+	    boolean body=false;
+	    boolean useAnalyzer=false;
+	    
+	    if (args.length != 1) {
+			System.out.println("A folder is needed for the index");
+			  System.err.println("Usage: " + usage);
+		      System.exit(1);
+		}
+	    
+	    
 	    for (int i = 0; i < args.length; i++) {
 	      switch (args[i]) {
 	        case "-index":
@@ -42,26 +60,47 @@ public class WebIndexer implements AutoCloseable {
 	        case "-docs":
 	          DOCS_PATH = args[++i];
 	          break;
-	        case "-knn_dict":
-	          vectorDictSource = args[++i];
-	          break;
-	        case "-update":
-	          CREATE = false;
-	          break;
 	        case "-create":
-	          create = true;
+	           create = true;
 	          break;
+	        case "-numThread":
+	          int aux = Integer.valueOf(args[++i]);
+	          if (aux <  numThreads) numThreads = aux;
+	          break;
+	        case "-h":
+	          infoThread = true;
+	          break;
+	        case "-p":
+		      infoIndex = true;
+		      break;
+	        case "-titleTermVector":
+		      title = true;
+		      break;
+	        case "-bodyTermVectors":
+		      body = true;
+		      break;
+	        case "-analyzer":
+	        	//ver opciones que damos por defecto el standard
+		          useAnalyzer = true;
+		          break;
 	        default:
 	          throw new IllegalArgumentException("unknown parameter " + args[i]);
 	      }
 	    }
 
-	    if (docsPath == null) {
+	    if (DOCS_PATH == null) {
 	      System.err.println("Usage: " + usage);
 	      System.exit(1);
 	    }
+	    
+	    if (INDEX_PATH == null) {
+		      System.err.println("Usage: " + usage);
+		      System.exit(1);
+		    }
 
-	    final Path docDir = Paths.get(docsPath);
+	   
+	    //
+	    final Path docDir = Paths.get(DOCS_PATH);
 	    if (!Files.isReadable(docDir)) {
 	      System.out.println(
 	          "Document directory '"
@@ -72,9 +111,9 @@ public class WebIndexer implements AutoCloseable {
 
 	    Date start = new Date();
 	    try {
-	      System.out.println("Indexing to directory '" + indexPath + "'...");
+	      System.out.println("Indexing to directory '" + INDEX_PATH + "'...");
 
-	      Directory dir = FSDirectory.open(Paths.get(indexPath));
+	      Directory dir = FSDirectory.open(Paths.get( INDEX_PATH));
 	      Analyzer analyzer = new StandardAnalyzer();
 	      IndexWriterConfig iwc = new IndexWriterConfig(analyzer);
 
@@ -94,7 +133,7 @@ public class WebIndexer implements AutoCloseable {
 	      //
 	      // iwc.setRAMBufferSizeMB(256.0);
 
-	      KnnVectorDict vectorDictInstance = null;
+	     /* KnnVectorDict vectorDictInstance = null;
 	      long vectorDictSize = 0;
 	      if (vectorDictSource != null) {
 	        KnnVectorDict.build(Paths.get(vectorDictSource), dir, KNN_DICT);
@@ -115,7 +154,7 @@ public class WebIndexer implements AutoCloseable {
 	        // writer.forceMerge(1);
 	      } finally {
 	        IOUtils.close(vectorDictInstance);
-	      }
+	      }*/
 
 	      Date end = new Date();
 	      try (IndexReader reader = DirectoryReader.open(dir)) {
@@ -126,7 +165,7 @@ public class WebIndexer implements AutoCloseable {
 	                + (end.getTime() - start.getTime())
 	                + " ms");
 	        if (reader.numDocs() > 100
-	            && vectorDictSize < 1_000_000
+	           // && vectorDictSize < 1_000_000
 	            && System.getProperty("smoketester") == null) {
 	          throw new RuntimeException(
 	              "Are you (ab)using the toy vector dictionary? See the package javadocs to understand why you got this exception.");
@@ -148,3 +187,4 @@ public class WebIndexer implements AutoCloseable {
 	
 
 }
+
