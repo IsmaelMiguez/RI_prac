@@ -26,7 +26,7 @@ import es.udc.fi.ri.practica.WebIndexer;
 //
 
 
-public class WebIndexer implements AutoCloseable, Runnable {
+public class WebIndexer implements AutoCloseable {
 	
     static String INDEX_PATH = "index";
     static String DOCS_PATH = null;
@@ -37,7 +37,12 @@ public class WebIndexer implements AutoCloseable, Runnable {
     static boolean title=false;
     static boolean body=false;
     static boolean useAnalyzer=false;
+	
     
+
+	public WebIndexer(int i){
+		thisThread = i;
+	}
 	
 	public static void main(String[] args) throws Exception {
 	    String usage =
@@ -100,12 +105,7 @@ public class WebIndexer implements AutoCloseable, Runnable {
 		      System.exit(1);
 		    }
 
-	   // * todo ver la division de datos 
-	    
-	    
-	    /*movido a la funcion run pendiente de revisar si este seria el punto de corte o se deben compartir los elementos inicializados, 
-	   
-	    final Path docDir = Paths.get(DOCS_PATH);
+	final Path docDir = Paths.get(DOCS_PATH);
 	    if (!Files.isReadable(docDir)) {
 	      System.out.println(
 	          "Document directory '"
@@ -113,6 +113,22 @@ public class WebIndexer implements AutoCloseable, Runnable {
 	              + "' does not exist or is not readable, please check the path");
 	      System.exit(1);
 	    }
+
+
+
+	ExecutorService pool = Executor.newFixedThreadPool(numThreads)
+/*
+	for (int i = 0; i < numThread; i++){
+		WebIndexer num = new WebIndexer(i)
+		pool.execute(new WebIndexer);
+	}*7
+
+	   // * todo ver la division de datos 
+	    
+	    
+	    /*movido a la funcion run pendiente de revisar si este seria el punto de corte o se deben compartir los elementos inicializados, 
+	   
+	    
 
 	  
 	    *  Date start = new Date();
@@ -189,26 +205,23 @@ public class WebIndexer implements AutoCloseable, Runnable {
 		
 	}
 
+	private class Indexer implements Runnable{
+
+		File read;
+
+	private Indexer(File f){
+		read = f;
+	}	
 
 	@Override
 	public void run() {
 		// Parte del codigo que se ejecutara en el hilo
-		
-		final Path docDir = Paths.get(DOCS_PATH);
-	    if (!Files.isReadable(docDir)) {
-	      System.out.println(
-	          "Document directory '"
-	              + docDir.toAbsolutePath()
-	              + "' does not exist or is not readable, please check the path");
-	      System.exit(1);
-	    }
-		
+				
 		
 		 Date start = new Date();
 		    try {
-		      System.out.println("Indexing to directory '" + INDEX_PATH + "'...");
+		      System.out.println("Indexing file" + f.getParent() + "'...");
 
-		      Directory dir = FSDirectory.open(Paths.get( INDEX_PATH));
 		      Analyzer analyzer = new StandardAnalyzer();
 		      IndexWriterConfig iwc = new IndexWriterConfig(analyzer);
 
@@ -221,27 +234,13 @@ public class WebIndexer implements AutoCloseable, Runnable {
 		        iwc.setOpenMode(OpenMode.CREATE_OR_APPEND);
 		      }
 
-		      
-		      Date end = new Date();
-		      try (IndexReader reader = DirectoryReader.open(dir)) {
-		        System.out.println(
-		            "Indexed "
-		                + reader.numDocs()
-		                + " documents in "
-		                + (end.getTime() - start.getTime())
-		                + " ms");
-		        if (reader.numDocs() > 100
-		           // && vectorDictSize < 1_000_000
-		            && System.getProperty("smoketester") == null) {
-		          throw new RuntimeException(
-		              "Are you (ab)using the toy vector dictionary? See the package javadocs to understand why you got this exception.");
-		        }
-		      }
+			  //todo leer url pedir url indexar url
 		    } catch (IOException e) {
 		      System.out.println(" caught a " + e.getClass() + "\n with message: " + e.getMessage());
 		
 		    }
 		}
-}
+	}
 
 
+ }
