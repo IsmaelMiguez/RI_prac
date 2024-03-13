@@ -80,7 +80,7 @@ public class WebIndexer implements AutoCloseable {
 	            + "in INDEX_PATH that can be searched with SearchFiles\n";
 	   
 	
-	    if (args.length != 1) {
+	    if (args.length < 2) {
 			System.out.println("A folder is needed for the index");
 			  System.err.println("Usage: " + usage);
 		      System.exit(1);
