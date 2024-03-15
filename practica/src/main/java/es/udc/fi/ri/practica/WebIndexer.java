@@ -4,8 +4,10 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.net.URL;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -18,13 +20,20 @@ import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Date;
+import java.util.HashSet;
+import java.util.LinkedList;
+import java.util.List;
 import java.util.Properties;
+import java.util.Scanner;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
-import org.apache.lucene.demo.knn.KnnVectorDict;
+//import org.apache.lucene.demo.knn.KnnVectorDict;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.document.KeywordField;
 import org.apache.lucene.document.KnnFloatVectorField;
@@ -44,11 +53,13 @@ import org.jsoup.Jsoup; //añadido a las dependencias
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 
-import simpledemo.IndexFiles;
+//import simpledemo.IndexFiles;
 
 
 public class WebIndexer implements AutoCloseable {
 	
+	 private Set<String> visitedURLs =  new HashSet<>();
+	 private List<String> URLList = new LinkedList<>();
 	
 	@SuppressWarnings({ "deprecation", "deprecation" })
 	public static void main(String[] args) throws Exception {
@@ -70,7 +81,7 @@ public class WebIndexer implements AutoCloseable {
 	    boolean title=false;
 	    boolean body=false;
 	    boolean useAnalyzer=false;
-	    Analyzer analyzer; //porque me indica que esta duplicado??
+	    Analyzer analyzer1; //porque me indica que esta duplicado??
 		
 		//string the ayuda en caso de fallo
 	    String usage =
@@ -80,7 +91,7 @@ public class WebIndexer implements AutoCloseable {
 	            + "in INDEX_PATH that can be searched with SearchFiles\n";
 	   
 	
-	    if (args.length < 2) {
+	    if (args.length != 1) {
 			System.out.println("A folder is needed for the index");
 			  System.err.println("Usage: " + usage);
 		      System.exit(1);
@@ -142,11 +153,11 @@ public class WebIndexer implements AutoCloseable {
 		 //comprobamos y cargamos el analyzer que se va a utilizar
 		   if (useAnalyzer) {
 			   String claseAnalyzer2 = properties.getProperty("analyzer2");
-			   analyzer =  (Analyzer) Class.forName(claseAnalyzer2).newInstance(); //cambiar por la otra opcion que se vaya a dar
+			   analyzer1 =  (Analyzer) Class.forName(claseAnalyzer2).newInstance(); //cambiar por la otra opcion que se vaya a dar
 	         }else {
 	        
 	        	 String claseAnalyzer1 = properties.getProperty("analyzer1"); 
-     	         analyzer = (Analyzer) Class.forName(claseAnalyzer1).newInstance(); 
+     	         analyzer1 = (Analyzer) Class.forName(claseAnalyzer1).newInstance(); 
 	         }
 		            
 
@@ -159,7 +170,7 @@ public class WebIndexer implements AutoCloseable {
                      executorService.submit(() -> {
                          try {
                              processUrlFile(urlFile, DOCS_PATH, INDEX_PATH, create,
-                                     infoThread, infoIndex, body, analyzer); //pendiente como escoger y tratar el analyzes
+                                     infoThread, infoIndex, body, analyzer1); //pendiente como escoger y tratar el analyzes
                          } catch (IOException e) {
                              e.printStackTrace(); // Handle appropriately
                          }
@@ -255,6 +266,9 @@ public class WebIndexer implements AutoCloseable {
                iwc.setOpenMode(OpenMode.CREATE_OR_APPEND);
              }
 
+             
+             
+             
              // Optional: for better indexing performance, if you
              // are indexing many documents, increase the RAM
              // buffer.  But if you do this, increase the max heap
@@ -305,8 +319,7 @@ public class WebIndexer implements AutoCloseable {
          }
         	 
 }
- 
- 
+
 private void indexDocs(final IndexWriter writer, Path path) throws IOException {
 	    if (Files.isDirectory(path)) {
 	      Files.walkFileTree(
@@ -385,7 +398,8 @@ private void indexDocs(final IndexWriter writer, Path path) throws IOException {
 	      }
 	    }
 	  }
-//extraemos la parte marcada como titulo del html
+
+	  //extraemos la parte marcada como titulo del html
  private static String extractTitle(String pageContent) {
      //extraer el titulo con JSOUP
 	 Document html = Jsoup.parse(pageContent);
@@ -428,6 +442,69 @@ private void indexDocs(final IndexWriter writer, Path path) throws IOException {
      }
      return properties;
  }
+ 
+ // funcion del crawler sacada de los apuntes de clase revisar si esta haciendo lo mismo que la llamada de antes al cliente de http
+
+ public void crawl(String url, String onlyDoms) { 	
+	     URLList.add(url);
+     while (!URLList.isEmpty()) {
+         String URL = URLList.remove(0);
+         if (isVisited(URL) || !isLegal(URL, onlyDoms))
+             continue;
+         try {
+             URL website = new URL(URL);
+             HttpURLConnection connection = (HttpURLConnection) website.openConnection();
+             connection.setRequestMethod("GET");
+             Scanner scanner = new Scanner(connection.getInputStream());
+             StringBuilder HTMLBuilder = new StringBuilder();
+             while (scanner.hasNextLine()) {
+                 HTMLBuilder.append(scanner.nextLine());
+             }
+             String HTML = HTMLBuilder.toString();
+             scanner.close();
+              //llamamos a la funcion que vomprobara la existencia de nuevas url y las metera en la lista de url a visitar
+             listOfAnchors(HTML);
+                
+             setVisited(URL);
+             insertToIndex(HTML);
+         } catch (Exception e) {
+             e.printStackTrace();
+         }
+     }
+ }
+
+ private boolean isVisited(String URL) {
+     return visitedURLs.contains(URL);
+ }
+
+ private void setVisited(String URL) {
+     visitedURLs.add(URL);
+ }
+
+ private boolean isLegal(String URL,String  onlyDoms) {
+    return (URL.endsWith(onlyDoms));
+    
+ }
+
+ private void listOfAnchors(String HTML) {
+     
+	 // Expresión regular para encontrar enlaces en la página HTML
+     Pattern pattern = Pattern.compile("<a\\s+href\\s*=\\s*\"(.*?)\"", Pattern.CASE_INSENSITIVE);
+     Matcher matcher = pattern.matcher(HTML);
+
+     // Iterar sobre los resultados de la expresión regular y extraer los enlaces
+     while (matcher.find()) {
+         String anchor = matcher.group(1);
+         URLList.add(anchor);
+     }
+ }
+
+ private void insertToIndex(String HTML) {
+     // aqui irea pues el indexado
+ }
+ 
+ 
+ 
 	//funcion de cierre de los hilos
  @Override
  public void close() throws Exception {
