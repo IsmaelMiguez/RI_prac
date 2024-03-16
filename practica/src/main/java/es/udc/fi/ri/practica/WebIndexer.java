@@ -60,6 +60,7 @@ public class WebIndexer implements AutoCloseable {
 	
 	 private Set<String> visitedURLs =  new HashSet<>();
 	 private List<String> URLList = new LinkedList<>();
+	 private String onlyDoms;
 	
 	@SuppressWarnings({ "deprecation", "deprecation" })
 	public static void main(String[] args) throws Exception {
@@ -81,7 +82,7 @@ public class WebIndexer implements AutoCloseable {
 	    boolean title=false;
 	    boolean body=false;
 	    boolean useAnalyzer=false;
-	    Analyzer analyzer1; //porque me indica que esta duplicado??
+	    Analyzer analyzer1=null; //porque me indica que esta duplicado??
 		
 		//string the ayuda en caso de fallo
 	    String usage =
@@ -109,7 +110,7 @@ public class WebIndexer implements AutoCloseable {
 	        case "-create":
 	           create = true;
 	          break;
-	        case "-numThread":
+	        case "-numThreads":
 	          int aux = Integer.valueOf(args[++i]);
 	          if (aux <  numThreads) numThreads = aux;
 	          break;
@@ -119,7 +120,7 @@ public class WebIndexer implements AutoCloseable {
 	        case "-p":
 		      infoIndex = true;
 		      break;
-	        case "-titleTermVector":
+	        case "-titleTermVectors":
 		      title = true;
 		      break;
 	        case "-bodyTermVectors":
@@ -149,52 +150,54 @@ public class WebIndexer implements AutoCloseable {
 	    ExecutorService executorService = Executors.newFixedThreadPool(numThreads);
 	    
 	    
-	 try {
-		 //comprobamos y cargamos el analyzer que se va a utilizar
-		   if (useAnalyzer) {
-			   String claseAnalyzer2 = properties.getProperty("analyzer2");
-			   analyzer1 =  (Analyzer) Class.forName(claseAnalyzer2).newInstance(); //cambiar por la otra opcion que se vaya a dar
-	         }else {
+	    try {
+	        //comprobamos y cargamos el analyzer que se va a utilizar
+	        if (useAnalyzer) {
+	            String claseAnalyzer2 = properties.getProperty("analyzer2");
+	            analyzer1 =  (Analyzer) Class.forName(claseAnalyzer2).newInstance(); //cambiar por la la
+	        } else {
+	            String claseAnalyzer1 = properties.getProperty("analyzer1"); 
+	            analyzer1 = (Analyzer) Class.forName(claseAnalyzer1).newInstance(); 
+	        }
 	        
-	        	 String claseAnalyzer1 = properties.getProperty("analyzer1"); 
-     	         analyzer1 = (Analyzer) Class.forName(claseAnalyzer1).newInstance(); 
-	         }
-		            
+	        //Para procesar cada archivo en un hilo distinto
+	        final String finalDOCS_PATH = DOCS_PATH;
+	        final String finalINDEX_PATH = INDEX_PATH;
+	        final Boolean finalCreate = create;
+	        final Boolean finalInfoThread = infoThread;
+	        final Boolean finalInfoIndex = infoIndex;
+	        final Boolean finalBody = body;
+	        final Analyzer finalAnalyzer1 = analyzer1;
+	        Path urlsPath = Path.of(DOCS_PATH);//archivo donde estan las url
+	        Files.list(urlsPath)
+	            .filter(p -> p.toString().endsWith(".url"))
+	            .forEach(urlFile -> {
+	                executorService.submit(() -> {
+	                    try {
+	                        processUrlFile(urlFile, finalDOCS_PATH, finalINDEX_PATH, finalCreate,
+	                            finalInfoThread, finalInfoIndex, finalBody, finalAnalyzer1); //pendiente como escoger y tratar el analyzes
+	                    } catch (IOException e) {
+	                        e.printStackTrace(); // Handle appropriately
+	                    }
+	                });
+	            });
+	            
+	        //  Imprime si se ha creado el indice
+	        if (infoIndex) {
+	            long startTime = System.currentTimeMillis();
+	            executorService.shutdown();
+	            while (!executorService.isTerminated()) {
+	                //Comprueba si loa hilos han acabado 
+	            }
+	            long elapsedTime = System.currentTimeMillis() - startTime;
+	            System.out.println("Created index in " + elapsedTime + " milliseconds");
+	        }
 
-		 
-         //Para procesar cada archivo en un hilo distinto
-         Path urlsPath = Path.of(DOCS_PATH);//archivo donde estan las url
-         Files.list(urlsPath)
-                 .filter(p -> p.toString().endsWith(".url"))
-                 .forEach(urlFile -> {
-                     executorService.submit(() -> {
-                         try {
-                             processUrlFile(urlFile, DOCS_PATH, INDEX_PATH, create,
-                                     infoThread, infoIndex, body, analyzer1); //pendiente como escoger y tratar el analyzes
-                         } catch (IOException e) {
-                             e.printStackTrace(); // Handle appropriately
-                         }
-                     });
-                 });
+	    } finally {
+	        // se cierra la pool de hilos
+	        executorService.shutdown();
+	    }
 
-         
-         
-
-         //  Imprime si se ha creado el indice
-         if (infoIndex) {
-             long startTime = System.currentTimeMillis();
-             executorService.shutdown();
-             while (!executorService.isTerminated()) {
-                 //Comprueba si loa hilos han acabado 
-             }
-             long elapsedTime = System.currentTimeMillis() - startTime;
-             System.out.println("Created index in " + elapsedTime + " milliseconds");
-         }
-
-     } finally {
-         // se cierra la pool de hilos
-         executorService.shutdown();
-     }
 }
 
  private static void processUrlFile(Path urlFile, String docsPath, String indexPath,
@@ -208,11 +211,13 @@ public class WebIndexer implements AutoCloseable {
                  " started processing " + urlFile.getFileName());
      }
      try {
-    	 
-    	 //Funcion que realizara la descarga de la pagina el parseado y la indexación
-		downloadAndIndexPage( urlFile.toString(),  docsPath,  indexPath,
-		          createIndex,  titleTermVectors,
-		          bodyTermVectors,  analyzer);
+    	// Leer el archivo de URL y procesar cada URL
+         List<String> urls = Files.readAllLines(urlFile);
+         for (String url : urls) {
+             // Descargar y indexar la página asociada a la URL
+             downloadAndIndexPage(url, docsPath, indexPath, createIndex,
+                     titleTermVectors, bodyTermVectors, analyzer);
+         }
 	} catch (IOException e) {		
 		e.printStackTrace();
 	} catch (InterruptedException e) {		
@@ -441,12 +446,23 @@ private void indexDocs(final IndexWriter writer, Path path) throws IOException {
          }
      }
      return properties;
+     
+     
+    /*
+     *     Properties properties = new Properties();
+    try (FileInputStream input = new FileInputStream("src/main/resources/config.properties")) {
+        properties.load(input);
+    }
+    return properties;
+}
+     */
  }
  
  // funcion del crawler sacada de los apuntes de clase revisar si esta haciendo lo mismo que la llamada de antes al cliente de http
 
- public void crawl(String url, String onlyDoms) { 	
-	     URLList.add(url);
+ public void crawl(String url, String onlyDoms) { 
+	 this.onlyDoms = onlyDoms;
+	 URLList.add(url);
      while (!URLList.isEmpty()) {
          String URL = URLList.remove(0);
          if (isVisited(URL) || !isLegal(URL, onlyDoms))
@@ -500,8 +516,37 @@ private void indexDocs(final IndexWriter writer, Path path) throws IOException {
  }
 
  private void insertToIndex(String HTML) {
-     // aqui irea pues el indexado
- }
+	 /*  
+	 try {
+	        // Crear un nuevo analizador estándar de Lucene
+	        Analyzer analyzer = new StandardAnalyzer();
+
+	        // Configurar el directorio de índice
+	        Directory indexDir = FSDirectory.open(Paths.get("index"));
+
+	        // Configurar el analizador de consultas
+	        IndexWriterConfig config = new IndexWriterConfig(analyzer);
+
+	        // Crear un escritor de índice
+	        IndexWriter writer = new IndexWriter(indexDir, config);
+
+	        // Crear un nuevo documento
+	        Document doc = new Document();
+
+	        // Agregar el contenido HTML al documento
+	        doc.add(new TextField("content", HTML, Field.Store.YES));
+
+	        // Escribir el documento en el índice
+	        writer.addDocument(doc);
+
+	        // Cerrar el escritor de índice
+	        writer.close();
+	    } catch (IOException e) {
+	        e.printStackTrace();
+	    }
+	    */
+	}
+
  
  
  
