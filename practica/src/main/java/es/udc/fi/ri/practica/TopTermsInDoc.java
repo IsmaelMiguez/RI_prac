@@ -35,7 +35,7 @@ public class TopTermsInDoc  {
 		
 		//string the ayuda en caso de fallo
 	    String usage =
-	        "java org.apache.lucene.demo.IndexFiles"
+	        "TopTermsInDoc"
 	            + " [-index indexPath] [-field field] [-docID docID / -url url] [-topN topN] [-outfile outfilePath] \n\n"
 	            + "This search the documents in indexPath, showing doc information";
 		
@@ -50,6 +50,7 @@ public class TopTermsInDoc  {
         String field = null;
         int docID = 0;
         Boolean topN = false;
+	int N;
         String outfilePath = null;
         String url = null;
 
@@ -63,7 +64,7 @@ public class TopTermsInDoc  {
 	          field = args[++i];
 	          break;
 	        case "-docID":
-	           docID = Integer.valueOf(args[++i]);;
+	           docID = Integer.valueOf(args[++i]);
 	          break;
 	        case "-url":
 	          url = args[++i];
@@ -72,14 +73,13 @@ public class TopTermsInDoc  {
 	        	outfilePath = args[++i];
 	          break;
 	        case "-topN":
-	          topN = true;
-	          break;
-	 
+	         topN = true;
+	         N = Integer.valueOf(args[++i]);
+		 break;
 	        default:
 	          throw new IllegalArgumentException("unknown parameter " + args[i]);
 	      }
 	    }
-	    
 	    if (indexPath == null || field == null || (docID == 0 && url == null) || topN == 0 || outfilePath == null) {
             System.err.println("Missing required arguments.");
             System.exit(1);
@@ -108,6 +108,7 @@ public class TopTermsInDoc  {
         if (docID != 0) {
             getDocumentInfoByDocID(indexReader, docID, field, documentInfo);
         } else {
+		//comprobar que la url es valida
             getDocumentInfoByURL(indexReader, url, field, documentInfo);
         }
         
@@ -120,10 +121,10 @@ public class TopTermsInDoc  {
         });
 
         // Obtener los primeros N documentos
-        List<String> topNDocumentInfo = documentInfo.subList(0, Math.min(topN, documentInfo.size()));
+        List<String> topNDocumentInfo = documentInfo.subList(0, Math.min(N, documentInfo.size()));
 
         // Imprimir los primeros N documentos
-        System.out.println("Top " + topN + " documentos:");
+        System.out.println("Top " + N + " documentos:");
         for (String docInfo : topNDocumentInfo) {
             System.out.println(docInfo);
         }
