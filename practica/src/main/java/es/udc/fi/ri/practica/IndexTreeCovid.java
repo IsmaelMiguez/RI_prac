@@ -40,8 +40,8 @@ public static void main(String[] args) throws Exception {
 	String iModel = null; //o esto o el bool de abajo que son dos tipos y requieren un float como parametro??
 	float lambda = 0;
 	float k1 = 0;
+	//int numThreads = Runtime.getRuntime().availableProcessors();
 	int numThreads = 1;
-	 
 	//string the ayuda en caso de fallo
     String usage =
         "IndexTrecCovid"
@@ -167,19 +167,24 @@ public static void main(String[] args) throws Exception {
 	             
 	  	        try (// Crear un escritor de índice
 				IndexWriter writer = new IndexWriter(dir, iwc)) {
-					//lñector del archivo
-	  	        	org.apache.lucene.document.Document doc = new org.apache.lucene.document.Document();
-	  	        	doc.add(new KeywordField("id", Cdoc.id(), Field.Store.YES));
-	  	        	doc.add(new TextField("title", Cdoc.title(), Field.Store.YES));
-	  	        	doc.add(new TextField("text", Cdoc.text(), Field.Store.YES));
-	  	        	doc.add(new StringField("url", Cdoc.metadata().url(), Field.Store.YES));
-	  	        	doc.add(new StringField("pubmed_id", Cdoc.metadata().pubmed_id(), Field.Store.YES));
-	  	        	writer.addDocument(doc);
-				}
-          
-     
-	  	        
-		 } catch(LockObtainFailedException e) {
+						//lñector del archivo
+		  	        	org.apache.lucene.document.Document doc = new org.apache.lucene.document.Document();
+		  	        	doc.add(new KeywordField("id", Cdoc.id(), Field.Store.YES));
+		  	        	doc.add(new TextField("title", Cdoc.title(), Field.Store.YES));
+		  	        	doc.add(new TextField("text", Cdoc.text(), Field.Store.YES));
+		  	        	doc.add(new StringField("url", Cdoc.metadata().url(), Field.Store.YES));
+		  	        	doc.add(new StringField("pubmed_id", Cdoc.metadata().pubmed_id(), Field.Store.YES));
+		  	        	
+					
+	          
+		  	        	if (finalopenMode.equalsIgnoreCase("create")) {//comprobamos si se crea o se modifica
+		  	        		writer.addDocument(doc);
+		  	        	} else  {  // Add new documents to an existing index:
+		  	        		writer.updateDocument(new org.apache.lucene.index.Term("path", doc.toString()), doc);
+		  	        	} 
+	  	        		writer.close(); 
+	  	        	}
+	  	        } catch(LockObtainFailedException e) {
 			 System.out.println("Retry indexing "+ Cdoc.title());
 			 
 			 try {
@@ -192,8 +197,10 @@ public static void main(String[] args) throws Exception {
 			 }
 		} catch (Exception e) {
 	             System.out.println(" caught a " + e.getClass() + "\n with message: " + e.getMessage());   	   
-	           }		  
+	           		  
 	}
+	  	       
+}
 	 
 
 	 
@@ -204,3 +211,5 @@ public static void main(String[] args) throws Exception {
 		}
 
 	}
+
+
