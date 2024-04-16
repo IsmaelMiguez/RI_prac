@@ -2,6 +2,7 @@ package es.udc.fi.ri.practica;
 
 import java.io.IOException; //https://docs.oracle.com/javase/8/docs/api/java/io/IOException.html
 import java.nio.file.Paths;//https://docs.oracle.com/javase/8/docs/api/java/nio/file/Paths.html
+import java.util.ArrayList;
 import java.util.List;//https://docs.oracle.com/javase/8/docs/api/java/util/List.html
 import java.util.Random;
 import java.util.concurrent.ExecutorService;//https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/ExecutorService.html
@@ -40,8 +41,8 @@ public static void main(String[] args) throws Exception {
 	String iModel = null; //o esto o el bool de abajo que son dos tipos y requieren un float como parametro??
 	float lambda = 0;
 	float k1 = 0;
-	//int numThreads = Runtime.getRuntime().availableProcessors();
-	int numThreads = 1;
+	int numThreads = Runtime.getRuntime().availableProcessors();
+	//int numThreads = 1;
 	//string the ayuda en caso de fallo
     String usage =
         "IndexTrecCovid"
@@ -112,11 +113,11 @@ public static void main(String[] args) throws Exception {
 		        	System.err.println("Usage: " + usage);
 		            System.exit(1);
 		        }   
-		        
-		        for (CovidDocument d : docu) {
-		        	
+		       
+		        while(!docu.isEmpty()) {
+		        	final List<CovidDocument> dc =  share(docu, numThreads);
                 executorService.submit(()-> {
-		         insertToIndex(finalINDEX_PATH, d, finalopenMode, finaliMode,finallambda,finalK1);
+		         insertToIndex(finalINDEX_PATH,dc, finalopenMode, finaliMode,finallambda,finalK1);
                    } );
 		            }
 		            
@@ -131,20 +132,31 @@ public static void main(String[] args) throws Exception {
 		    } finally {
 		        // se cierra la pool de hilos
 		        executorService.shutdown();
+		        System.exit(1);
 		    }
     
 
 }
-    
+    	
 	
-	
-	 private static void insertToIndex(String INDEX_Path,CovidDocument Cdoc ,  String finalopenMode, 
-			 							String finaliMode, float finallambda, float finalK1) {  
+	 private static void insertToIndex(String INDEX_Path,List<CovidDocument> Cdoc ,  String finalopenMode, 
+			 	String finaliMode, float finallambda, float finalK1) {  
+		 		       	
 		 try {
 	         // Configurar el directorio de índice
 	          Directory dir = FSDirectory.open(Paths.get(INDEX_Path));
 	          // Configurar el analizador de consultas
 	          IndexWriterConfig iwc = new IndexWriterConfig(new StandardAnalyzer());
+	          
+	          if (finaliMode.equalsIgnoreCase("jm")) {//comprobamos si se crea o se modifica
+	               iwc.setSimilarity(new LMJelinekMercerSimilarity(finallambda));
+	             } else if(finaliMode.equalsIgnoreCase("bm25")) {  // Add new documents to an existing index:
+	               iwc.setSimilarity(new BM25Similarity(finalK1,(float) 0.75));
+	             } else {
+	            	 System.err.println("Wrong similarity Mode");
+			            System.exit(1);
+	             }
+	          
 	             if (finalopenMode.equalsIgnoreCase("create")) {//comprobamos si se crea o se modifica
 	               iwc.setOpenMode(OpenMode.CREATE);
 	             } else if(finalopenMode.equalsIgnoreCase("create_or_append")) {  // Add new documents to an existing index:
@@ -154,55 +166,81 @@ public static void main(String[] args) throws Exception {
 	             }else {
 	            	 System.err.println("Wrong open Mode");
 			            System.exit(1);
-	             }
-
-	             if (finaliMode.equalsIgnoreCase("jm")) {//comprobamos si se crea o se modifica
-		               iwc.setSimilarity(new LMJelinekMercerSimilarity(finallambda));
-		             } else if(finaliMode.equalsIgnoreCase("bm25")) {  // Add new documents to an existing index:
-		               iwc.setSimilarity(new BM25Similarity(finalK1,(float) 0.75));
-		             } else {
-		            	 System.err.println("Wrong similarity Mode");
-				            System.exit(1);
-		             }
+	             }  
 	             
 	  	        try (// Crear un escritor de índice
 				IndexWriter writer = new IndexWriter(dir, iwc)) {
-						//lñector del archivo
-		  	        	org.apache.lucene.document.Document doc = new org.apache.lucene.document.Document();
-		  	        	doc.add(new KeywordField("id", Cdoc.id(), Field.Store.YES));
-		  	        	doc.add(new TextField("title", Cdoc.title(), Field.Store.YES));
-		  	        	doc.add(new TextField("text", Cdoc.text(), Field.Store.YES));
-		  	        	doc.add(new StringField("url", Cdoc.metadata().url(), Field.Store.YES));
-		  	        	doc.add(new StringField("pubmed_id", Cdoc.metadata().pubmed_id(), Field.Store.YES));
-		  	        	
-					
-	          
+						//añadimos el archivo
 		  	        	if (finalopenMode.equalsIgnoreCase("create")) {//comprobamos si se crea o se modifica
-		  	        		writer.addDocument(doc);
+		  	        		create(Cdoc, writer);
 		  	        	} else  {  // Add new documents to an existing index:
-		  	        		writer.updateDocument(new org.apache.lucene.index.Term("path", doc.toString()), doc);
+		  	        		create_add(Cdoc, writer);
 		  	        	} 
-	  	        		writer.close(); 
+	  	        writer.close(); 
 	  	        	}
 	  	        } catch(LockObtainFailedException e) {
-			 System.out.println("Retry indexing "+ Cdoc.title());
-			 
+	  	        	System.out.println("Retry indexing ");
+	  	        	
 			 try {
 				 Thread.sleep(new Random().nextInt(3000));
 				 insertToIndex(  INDEX_Path, Cdoc ,   finalopenMode, 
 							 finaliMode, finallambda,  finalK1);
 			} catch (InterruptedException e1) {
+			 
 				System.err.println(" caught a " + e.getClass() + "\n with message: " + e.getMessage());
 	            System.exit(1);
 			 }
 		} catch (Exception e) {
-	             System.out.println(" caught a " + e.getClass() + "\n with message: " + e.getMessage());   	   
+		 
+	             System.out.println(" caught a " + e.getClass() + "\n with message: " + e.getMessage());  
+	             System.exit(1);
 	           		  
 	}
-	  	       
+		       
 }
 	 
-
+	 public static List<CovidDocument> share (List<CovidDocument> docu, int numThreads){
+		 	int size = docu.size();
+	        int chunk = numThreads/size +  numThreads%size;
+	        
+	        
+	        List<CovidDocument> toReturn = new ArrayList<>();
+	        for (int i = 0;  i < chunk; i++ ) {
+	        	toReturn.add(docu.remove(0));
+	        }
+	        
+	        return toReturn;
+	 }
+	 
+	 
+	 public static void create_add (List<CovidDocument> docu, IndexWriter writer ) throws IOException {
+		 for(CovidDocument Cdoc : docu) {
+			 org.apache.lucene.document.Document doc = new org.apache.lucene.document.Document();
+		       	doc.add(new KeywordField("id", Cdoc.id(), Field.Store.YES));
+		       	doc.add(new TextField("title", Cdoc.title(), Field.Store.YES));
+		       	doc.add(new TextField("text", Cdoc.text(), Field.Store.YES));
+		       	doc.add(new StringField("url", Cdoc.metadata().url(), Field.Store.YES));
+		       	doc.add(new StringField("pubmed_id", Cdoc.metadata().pubmed_id(), Field.Store.YES));
+		       	writer.updateDocument(new org.apache.lucene.index.Term("path", doc.toString()), doc);
+	        		
+		 }
+		 
+	 }
+  
+	 
+	 public static void create (List<CovidDocument> docu, IndexWriter writer ) throws IOException {
+		 for(CovidDocument Cdoc : docu) {
+			 org.apache.lucene.document.Document doc = new org.apache.lucene.document.Document();
+		       	doc.add(new KeywordField("id", Cdoc.id(), Field.Store.YES));
+		       	doc.add(new TextField("title", Cdoc.title(), Field.Store.YES));
+		       	doc.add(new TextField("text", Cdoc.text(), Field.Store.YES));
+		       	doc.add(new StringField("url", Cdoc.metadata().url(), Field.Store.YES));
+		       	doc.add(new StringField("pubmed_id", Cdoc.metadata().pubmed_id(), Field.Store.YES));
+		       	writer.addDocument(doc);
+	        	
+		 }
+		 
+	 }
 	 
 		//funcion de cierre de los hilos
 	 @Override

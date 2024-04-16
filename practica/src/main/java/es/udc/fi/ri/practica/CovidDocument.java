@@ -14,6 +14,6 @@ public record CovidDocument( @JsonProperty("_id") String id, String title, Strin
 
 		public String pubmed_id() {
 			return pubmed_id;
-		}}
+		}
+		}
 }
-
