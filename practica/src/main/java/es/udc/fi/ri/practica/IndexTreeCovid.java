@@ -201,7 +201,7 @@ public static void main(String[] args) throws Exception {
 	 
 	 public static List<CovidDocument> share (List<CovidDocument> docu, int numThreads){
 		 	int size = docu.size();
-	        int chunk = numThreads/size +  numThreads%size;
+	        int chunk = size/numThreads +  size%numThreads;
 	        
 	        
 	        List<CovidDocument> toReturn = new ArrayList<>();
