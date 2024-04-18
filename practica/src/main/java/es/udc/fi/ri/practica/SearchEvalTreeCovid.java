@@ -1,8 +1,6 @@
 package es.udc.fi.ri.practica;
 
-import java.io.BufferedReader;
 import java.io.BufferedWriter;
-import java.io.FileReader;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -11,10 +9,11 @@ import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
+import java.util.Scanner;
 
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
+import org.apache.lucene.document.Document;
 import org.apache.lucene.index.CorruptIndexException;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexReader;
@@ -55,6 +54,7 @@ public class SearchEvalTreeCovid {
 	    	String iModel = null; //o esto o el bool de abajo que son dos tipos y requieren un float como parametro??
 	    	float lambda = 0;
 	    	float k1 = 0;
+	    	String forPath= null;;
 
 		    //Inicialización de variables con argumentos
 		    for (int i = 0; i < args.length; i++) {
@@ -74,8 +74,8 @@ public class SearchEvalTreeCovid {
 			        	  all = true;
 			          }else if (q.contains("-")) {
 			        	 String[] queries = q.split("-");
-			        	 start=Integer.valueOf( queries[0]);
-			        	 end = Integer.valueOf( queries[1]);
+			        	 start=Integer.valueOf( queries[0])-1;
+			        	 end = Integer.valueOf( queries[1])-1;
 			        	 
 			        	  if (end>start) {
 			        		  System.err.println("Query selecction is incorrect");
@@ -83,15 +83,17 @@ public class SearchEvalTreeCovid {
 			        	  }
 			        	  
 			          }else {
-			        	  start = end =  Integer.valueOf(q);
+			        	  start = end =  Integer.valueOf(q)-1;
 			          }
 			          break;
 		        case "-search":
 		        	iModel=args[++i];
 		          if (iModel.equals("jm")){
 				  lambda = Float.valueOf(args[++i]);
+				  forPath = "lambda."+lambda;
 				  }else {
 				  k1 = Float.valueOf(args[++i]);
+				  forPath = "k1."+k1;
 			      }
 		          break;
 		        default:
@@ -118,7 +120,11 @@ public class SearchEvalTreeCovid {
 				indexReader = DirectoryReader.open(dir);
 		        indexSearcher = new IndexSearcher(indexReader);
 		        analyzer  = (new StandardAnalyzer());
-		        
+		        String path= "TREC-COVID."+iModel+"."+topN+".hits."+forPath+".q."+q+".txt";
+				String path2= "TREC-COVID."+iModel+"."+topN+".hits."+forPath+".q."+q+".csv";
+				String toSave =  "query " + "   " + "P@N " + "   " +"Recall@N " + "   " + "MAP@N " +"   "  + "MRR "  ;
+				writeToFile(path2, toSave);
+				double[] promedios = null;
 		        if (iModel.equalsIgnoreCase("jm")) {//comprobamos si se crea o se modifica
 		        	indexSearcher.setSimilarity(new LMJelinekMercerSimilarity(lambda));
 		             } else if(iModel.equalsIgnoreCase("bm25")) {  // Add new documents to an existing index:
@@ -129,24 +135,28 @@ public class SearchEvalTreeCovid {
 		             }
 		   
 				for(Query qr : toExam) {
-					String[] queryText= qr.metadata().query().split(" ");
+					String queryText= qr.metadata().query().toLowerCase();
 	                TopDocs topDocs = null;
+	                MultiFieldQueryParser parser = new MultiFieldQueryParser(new String[]{"text"}, analyzer);
 					try {
-						topDocs = indexSearcher.search(MultiFieldQueryParser.parse(queryText,new String[]{"text"}, analyzer), topN);
+						topDocs = indexSearcher.search(parser.parse(queryText), topN);
 					} catch (IOException | ParseException e) {
 						System.err.println(" caught a " + e.getClass() + "\n with message: " + e.getMessage());
 				         System.exit(1);
 					}
-					List<Judgments> judgmentsMap = loadJudgments(Integer.valueOf(qr.id()));
+					HashMap<String, Integer> judgmentsMap = toHash( loadJudgments(Integer.valueOf(qr.id())));
 					
-					calculate(topDocs, judgmentsMap,qr );
-					
+					double[] aux = calculate(indexReader, topDocs, judgmentsMap, cut,qr,path, path2);
+					promedios = sumados(promedios, aux);
 				}
 			  
-			    
-			    
 			        indexReader.close();
 			        dir.close();
+			        
+			        toSave= "promedios: \\n  " + (promedios[0]/toExam.size()) + "  " + (promedios[1]/toExam.size())  + 
+			        		"  " + (promedios[2]/toExam.size())  + "  " + (promedios[3]/toExam.size());
+			        writeToFile(path2, toSave);
+			        
 			} catch (CorruptIndexException e1) {
 				System.out.println(" caught a " + e1.getClass() + "\n with message: " + e1.getMessage());
 				e1.printStackTrace();
@@ -158,7 +168,19 @@ public class SearchEvalTreeCovid {
 			}
 	    }
 
-	 /**
+	 private static double[] sumados(double[] promedios, double[] aux) {
+		if(promedios== null) {
+			return aux;
+		}else {
+			for (int i = 0; i < aux.length; i++) {
+				promedios[i]= promedios[i] + aux[i];	
+			}
+			return promedios;
+		}
+		
+	}
+
+	/**
 	  * Funcion que revisa las queries para evitar problemas de vocabulario
 	  * @param all boolean que indica si se seben usar todas las queries de la lista
 	  * @param start Indice de la primera query a revisar
@@ -170,7 +192,7 @@ public class SearchEvalTreeCovid {
 	    private static List<Query> selectQueries(boolean all, int start, int end) throws IOException {
 	    	var is = IndexTreeCovid.class.getResourceAsStream( "/trec-covid/queries.jsonl");
 	        ObjectReader reader = JsonMapper.builder().findAndAddModules().build()
-	                .readerFor(CovidDocument.class);
+	                .readerFor(Query.class);
 	        
 	        List<Query> queries = reader.<Query>readValues(is).readAll();
 	    	
@@ -195,20 +217,43 @@ public class SearchEvalTreeCovid {
 	     private static List<Judgments> loadJudgments(int start) throws IOException {
 	    	        
 	    	        
-	    	        var is = IndexTreeCovid.class.getResourceAsStream( "/trec-covid/qrels/test.tsv");
-	    	        ObjectReader reader = JsonMapper.builder().findAndAddModules().build()
-	    	                .readerFor(CovidDocument.class);	        
-	    	        List<Judgments> jmts = reader.<Judgments>readValues(is).readAll();
+	    	        var is = IndexTreeCovid.class.getResourceAsStream( "/trec-covid/qrels/test.tsv");	        
+	    	        List<Judgments>jmts = new ArrayList<Judgments>();
+	    	        
+	    	        try (Scanner scanner = new Scanner(is)) {
+	    	            while (scanner.hasNextLine()) {
+	    	                String line = scanner.nextLine();
+	    	                String[] parts = line.split("\t");
+	    	                if (!(parts[0].compareToIgnoreCase("query-id")==0)) {
+		    	                if (parts.length == 3) {
+		    	                    int queryId = Integer.parseInt(parts[0]);
+		    	                    String corpusId = parts[1];
+		    	                    int score = Integer.parseInt(parts[2]);
+		    	                   jmts.add(new Judgments(queryId, corpusId, score));
+		    	                }
+	    	                }
+	    	            }
+	    	            List<Judgments> selection = new ArrayList<Judgments>();
+	    	    		for (Judgments j : jmts) {
+	    	    			if (j.query()== start) {
+	    	    				selection.add(j);
+	    	    			}
+	    	    		}
+	    	    		return selection;
 	    	       
-	   	    		List<Judgments> selection = new ArrayList<Judgments>();
-	   	    		for (Judgments j : jmts) {
-	   	    			if (j.query()== start) {
-	   	    				selection.add(j);
-	   	    			}
-	   	    		}
-	   	    		return selection;
 	   	    	}
-	    	    
+	    	        }
+
+	     private static HashMap<String, Integer> toHash (List<Judgments> jmts){
+	    	
+	    	 HashMap<String, Integer> selection = new HashMap<String, Integer>();
+	    		for (Judgments j : jmts) {
+	    			if (j.score()>0) {
+	    				selection.put(j.corpus(),j.score());
+	    			}
+	    		}
+	    		return selection;
+	     }
 	    	    
 
 	/**
@@ -228,74 +273,43 @@ public class SearchEvalTreeCovid {
 	}
 		 
 	/**
+	 * @throws IOException 
 	 */
-	public static void calculate(TopDocs topDocs, List<Judgments> judgmentsMap, Query q )  {
-		      
-		      
-	
-		        // Metrics variables
-		        double totalPAtN = 0;
-		        double totalRecallAtN = 0;
-		        double totalMAPAtN = 0;
-		        double totalMRR = 0;
-		        int evaluatedQueries = 0;
-	
+	public static double[] calculate(IndexReader indexReader ,TopDocs topDocs, HashMap<String, Integer> judgmentsMap,int cut, Query q, String path, String path2 ) throws IOException  {
+		    int relevantes = 0;  
+		    double acumulador = 0;
+		    double reverse = 0;
+		    for (int i = 0 ; i < cut; i++) {
+				Document auc = indexReader.document(topDocs.scoreDocs[i].doc) ;
+		    // scoreDoc.doc contiene el número de documento
+			    if( judgmentsMap.containsKey(  auc.getValues("id")[0])) {
+			    	relevantes ++;
+			    	acumulador = acumulador+ ((double)relevantes/(i+1));  
+			    	reverse = reverse +(double) (1.0 /(i+1)); 
+			    }
+		    }
 		        // Calculate metrics
-	            double pAtN = calculatePAtN();
-	            double recallAtN = calculateRecallAtN();
-	            double mapAtN = calculateMAPAtN();
-	            double mrr = calculateMRR();
+	            double pAtN = (double) relevantes/cut;
+	            double recallAtN = (double)relevantes/judgmentsMap.size();
+	            double mapAtN =(double) acumulador/judgmentsMap.size();
+	            double mrr =(double) reverse/cut;
 	
-	            // Print query and metrics
-	            System.out.println("Query: " + q.metadata().query());
-	            System.out.println("P@N: " + pAtN);
-	            System.out.println("Recall@N: " + recallAtN);
-	            System.out.println("MAP@N: " + mapAtN);
-	            System.out.println("MRR: " + mrr);
-	            System.out.println();
-	
-	            // Update total metrics
-	            totalPAtN += pAtN;
-	            totalRecallAtN += recallAtN;
-	            totalMAPAtN += mapAtN;
-	            totalMRR += mrr;
-	            evaluatedQueries++; 
-	
-		        // Calculate average metrics
-		        double avgPAtN = totalPAtN / evaluatedQueries;
-		        double avgRecallAtN = totalRecallAtN / evaluatedQueries;
-		        double avgMAPAtN = totalMAPAtN / evaluatedQueries;
-		        double avgMRR = totalMRR / evaluatedQueries;
-	
-		        // Print average metrics
-		        System.out.println("Average P@N: " + avgPAtN);
-		        System.out.println("Average Recall@N: " + avgRecallAtN);
-		        System.out.println("Average MAP@N: " + avgMAPAtN);
-		        System.out.println("Average MRR: " + avgMRR);
-	
+	            String toSave= "query " + q.id() + " " + q.metadata().query();
+        		System.out.println(toSave);
+        		writeToFile(path, toSave);
+        		
+        		toSave = " P@N: " + pAtN +" Recall@N: " + recallAtN + " MAP@N: " + mapAtN + " MRR: " + mrr;
+        		System.out.println(toSave);
+        		writeToFile(path, toSave);
+        		
+        		toSave = q.id()+ ", " +  pAtN + ", "+ recallAtN+ ", "+ mapAtN + ", " + mrr;
+        		writeToFile(path2, toSave);
+        		double[] data = { pAtN, recallAtN ,mapAtN , mrr};
+        		return data;
 		      
 		    }
 	
 
-
-	    private static double calculatePAtN() {
-	        // Implement P@N calculation
-	        return 0;
-	    }
-
-	    private static double calculateRecallAtN() {
-	        // Implement Recall@N calculation
-	        return 0;
-	    }
-
-	    private static double calculateMAPAtN() {
-	        // Implement MAP@N calculation
-	        return 0;
-	    }
-
-	    private static double calculateMRR() {
-	        // Implement MRR calculation
-	        return 0;
-	    }
+	   
 	}
 
