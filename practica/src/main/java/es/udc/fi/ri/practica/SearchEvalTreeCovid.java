@@ -1,6 +1,7 @@
 package es.udc.fi.ri.practica;
 
 import java.io.BufferedWriter;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -27,6 +28,7 @@ import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FSDirectory;
 import com.fasterxml.jackson.databind.ObjectReader;
 import com.fasterxml.jackson.databind.json.JsonMapper;
+import com.opencsv.CSVWriter;
 
 public class SearchEvalTreeCovid {
 
@@ -122,9 +124,9 @@ public class SearchEvalTreeCovid {
 		        analyzer  = (new StandardAnalyzer());
 		        String path= "TREC-COVID."+iModel+"."+topN+".hits."+forPath+".q."+q+".txt";
 				String path2= "TREC-COVID."+iModel+"."+topN+".hits."+forPath+".q."+q+".csv";
-				String toSave =  "query " + "   " + "P@N " + "   " +"Recall@N " + "   " + "MAP@N " +"   "  + "MRR "  ;
-				writeToFile(path2, toSave);
-				double[] promedios = null;
+				String[] toSa =  {"query ", "P@N ","Recall@N ", "MAP@N ", "MRR "}  ;
+				writeToFile2(path2, toSa);
+				double[] promedios = {0,0,0,0};
 		        if (iModel.equalsIgnoreCase("jm")) {//comprobamos si se crea o se modifica
 		        	indexSearcher.setSimilarity(new LMJelinekMercerSimilarity(lambda));
 		             } else if(iModel.equalsIgnoreCase("bm25")) {  // Add new documents to an existing index:
@@ -153,9 +155,9 @@ public class SearchEvalTreeCovid {
 			        indexReader.close();
 			        dir.close();
 			        
-			        toSave= "promedios: \\n  " + (promedios[0]/toExam.size()) + "  " + (promedios[1]/toExam.size())  + 
-			        		"  " + (promedios[2]/toExam.size())  + "  " + (promedios[3]/toExam.size());
-			        writeToFile(path2, toSave);
+			        String[] toSave={ "promedios",String.valueOf(promedios[0]/toExam.size()), String.valueOf(promedios[1]/toExam.size()), 
+			        		String.valueOf(promedios[2]/toExam.size()) , String.valueOf(promedios[3]/toExam.size())};
+			        writeToFile2(path2, toSave);
 			        
 			} catch (CorruptIndexException e1) {
 				System.out.println(" caught a " + e1.getClass() + "\n with message: " + e1.getMessage());
@@ -257,16 +259,32 @@ public class SearchEvalTreeCovid {
 	    	    
 
 	/**
-	 * Funcion que escribe en archivo 
+	 * Funcion que escribe en archivo txt
 	 * @param filepath path del archivo que debe escribir
 	 * @param line linea que añade al archivo
 	 * @throws IOException
 	 */
-		
-	private static void writeToFile(String filepath, String line) throws IOException {
-	    try (BufferedWriter writer = Files.newBufferedWriter(Paths.get(filepath), StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.APPEND)) {
-	        writer.write(line);
-	        writer.newLine();
+	     private static void writeToFile(String filepath, String line) throws IOException {
+	 	    try (BufferedWriter writer = Files.newBufferedWriter(Paths.get(filepath), StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.APPEND)) {
+	 	        writer.write(line);
+	 	        writer.newLine();
+	 	    }catch(IOException e){
+	 			System.out.println("Impossible to write on file");
+	 	}
+	 	}
+	     /**
+	      * Funcion que escribe en cvs
+	      * @param filepath
+	      * @param line
+	      * @throws IOException
+	      */
+	private static void writeToFile2(String filepath, String[] line) throws IOException {
+		char delimitador = '\t'; // Tabulador como delimitador
+        char quotechar = '"';    // Carácter de comillas
+        char escapechar = '\\';  // Carácter de escape
+        String lineEnd = "\n";   // Terminador de línea
+	    try (CSVWriter writer = new CSVWriter(new FileWriter(filepath,true), delimitador, quotechar, escapechar, lineEnd)) {
+	        writer.writeNext(line,false);
 	    }catch(IOException e){
 			System.out.println("Impossible to write on file");
 	}
@@ -280,7 +298,7 @@ public class SearchEvalTreeCovid {
 		    double acumulador = 0;
 		    double reverse = 0;
 		    for (int i = 0 ; i < cut; i++) {
-				Document auc = indexReader.storedfields().document(topDocs.scoreDocs[i].doc) ;
+				Document auc = indexReader.storedFields().document(topDocs.scoreDocs[i].doc) ;
 		    // scoreDoc.doc contiene el número de documento
 			    if( judgmentsMap.containsKey(  auc.getValues("id")[0])) {
 			    	relevantes ++;
