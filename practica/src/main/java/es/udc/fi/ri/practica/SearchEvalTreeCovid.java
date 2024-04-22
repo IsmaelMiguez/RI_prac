@@ -280,7 +280,7 @@ public class SearchEvalTreeCovid {
 		    double acumulador = 0;
 		    double reverse = 0;
 		    for (int i = 0 ; i < cut; i++) {
-				Document auc = indexReader.document(topDocs.scoreDocs[i].doc) ;
+				Document auc = indexReader.storedfields().document(topDocs.scoreDocs[i].doc) ;
 		    // scoreDoc.doc contiene el número de documento
 			    if( judgmentsMap.containsKey(  auc.getValues("id")[0])) {
 			    	relevantes ++;
