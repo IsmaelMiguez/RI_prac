@@ -1,333 +1,270 @@
 package es.udc.fi.ri.practica;
 
-import java.io.BufferedWriter;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.nio.file.StandardOpenOption;
+import java.io.IOException; //https://docs.oracle.com/javase/8/docs/api/java/io/IOException.html
+import java.nio.file.FileSystemException;
+import java.nio.file.Paths;//https://docs.oracle.com/javase/8/docs/api/java/nio/file/Paths.html
 import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Scanner;
-
-import org.apache.lucene.analysis.Analyzer;
+import java.util.List;//https://docs.oracle.com/javase/8/docs/api/java/util/List.html
+import java.util.Random;
+import java.util.concurrent.ExecutorService;//https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/ExecutorService.html
+import java.util.concurrent.Executors;//https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/Executors.html
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
-import org.apache.lucene.document.Document;
-import org.apache.lucene.index.CorruptIndexException;
-import org.apache.lucene.index.DirectoryReader;
-import org.apache.lucene.index.IndexReader;
-import org.apache.lucene.queryparser.classic.MultiFieldQueryParser;
-import org.apache.lucene.queryparser.classic.ParseException;
-import org.apache.lucene.search.IndexSearcher;
-import org.apache.lucene.search.TopDocs;
+import org.apache.lucene.document.Field;//https://lucene.apache.org/core/7_0_1/core/org/apache/lucene/document/Field.html
+//import org.apache.lucene.document.Field.TermVector//https://lucene.apache.org/core/5_4_1/core/org/apache/lucene/document/Field.TermVector.html
+import org.apache.lucene.document.KeywordField;//https://lucene.apache.org/core/9_9_0/core/org/apache/lucene/document/KeywordField.html
+import org.apache.lucene.document.StringField;
+import org.apache.lucene.document.TextField;//https://lucene.apache.org/core/9_9_0/core/org/apache/lucene/document/TextField.html
+import org.apache.lucene.index.IndexWriter;//https://lucene.apache.org/core/7_0_1/core/org/apache/lucene/index/IndexWriter.html
+import org.apache.lucene.index.IndexWriterConfig;//https://lucene.apache.org/core/7_0_1/core/org/apache/lucene/index/IndexWriterConfig.html
+import org.apache.lucene.index.IndexWriterConfig.OpenMode;//https://lucene.apache.org/core/7_0_1/core/org/apache/lucene/index/IndexWriterConfig.OpenMode.html
 import org.apache.lucene.search.similarities.BM25Similarity;
 import org.apache.lucene.search.similarities.LMJelinekMercerSimilarity;
-import org.apache.lucene.store.Directory;
-import org.apache.lucene.store.FSDirectory;
+import org.apache.lucene.store.Directory;//https://lucene.apache.org/core/8_0_0/core/org/apache/lucene/store/Directory.html
+import org.apache.lucene.store.FSDirectory;//https://https://lucene.apache.org/core/8_0_0/core/org/apache/lucene/store/FSDirectory.html
+import org.apache.lucene.store.LockObtainFailedException;
 import com.fasterxml.jackson.databind.ObjectReader;
+//https://lucene.apache.org/core/4_0_0/core/org/apache/lucene/document/Document.html
 import com.fasterxml.jackson.databind.json.JsonMapper;
-import com.opencsv.CSVWriter;
 
-public class SearchEvalTreeCovid {
 
-	 public static void main(String[] args) throws IOException, ParseException {
-		//string the ayuda en caso de fallo
-		    String usage =
-		        "SearchEvalTreeCovid"
-		            + "  [-index INDEX_PATH] [-search jm <lambda> | bm25 <k1>][-cut n] [-top topN] [-queries  all | <int1> | <int1-int2> ] \n";
-			
-			if (args.length < 11) {
-				System.out.println("More parametres are needed");
-				  System.err.println("Usage: " + usage);
-			      System.exit(1);
-			}
-		
-			//Declaración de variables
-			
-			String indexPath = null;
-	        int  topN = 10;
-	        int  cut = 10;
-	        String q= null;
-	        boolean all = false;
-	        int  start = 0;
-	        int  end = 0;
-	    	String iModel = null; //o esto o el bool de abajo que son dos tipos y requieren un float como parametro??
-	    	float lambda = 0;
-	    	float k1 = 0;
-	    	String forPath= null;;
+public class IndexTreeCovid  implements AutoCloseable {
+	
 
-		    //Inicialización de variables con argumentos
-		    for (int i = 0; i < args.length; i++) {
-		      switch (args[i]) {
-		        case "-index":
-		          indexPath = args[++i];
-		          break;
-		        case "-top":
-		          topN =  Integer.valueOf(args[++i]);
-		          break;
-		        case "-cut":
-			          cut =  Integer.valueOf(args[++i]);
-			          break;
-		        case "-queries":
-			          q =  args[++i];
-			          if(q.equalsIgnoreCase("all")) {
-			        	  all = true;
-			          }else if (q.contains("-")) {
-			        	 String[] queries = q.split("-");
-			        	 start=Integer.valueOf( queries[0])-1;
-			        	 end = Integer.valueOf( queries[1])-1;
-			        	 
-			        	  if (end>start) {
-			        		  System.err.println("Query selecction is incorrect");
-			  	              System.exit(1);
-			        	  }
-			        	  
-			          }else {
-			        	  start = end =  Integer.valueOf(q)-1;
-			          }
-			          break;
-		        case "-search":
-		        	iModel=args[++i];
-		          if (iModel.equals("jm")){
-				  lambda = Float.valueOf(args[++i]);
-				  forPath = "lambda."+lambda;
-				  }else {
-				  k1 = Float.valueOf(args[++i]);
-				  forPath = "k1."+k1;
-			      }
-		          break;
-		        default:
-		          throw new IllegalArgumentException("unknown parameter " + args[i]);
-		      }
-		    }
-		    
-		    if (indexPath == null) {
-		        System.err.println("Usage: " + usage);
-		        System.exit(1);
-		      }
-		    
-		    
-	        
-	        //tratar con las queries
-	        
-	        List<Query> toExam = selectQueries(all, start, end); 
-		    Directory dir;
-			DirectoryReader indexReader;
-			IndexSearcher indexSearcher;
-			Analyzer analyzer;
-			try {
-				dir = FSDirectory.open(Paths.get(indexPath));
-				indexReader = DirectoryReader.open(dir);
-		        indexSearcher = new IndexSearcher(indexReader);
-		        analyzer  = (new StandardAnalyzer());
-		        String path= "TREC-COVID."+iModel+"."+topN+".hits."+forPath+".q."+q+".txt";
-				String path2= "TREC-COVID."+iModel+"."+topN+".hits."+forPath+".q."+q+".csv";
-				String[] toSa =  {"query ", "P@N ","Recall@N ", "MAP@N ", "MRR "}  ;
-				writeToFile2(path2, toSa);
-				double[] promedios = {0,0,0,0};
-		        if (iModel.equalsIgnoreCase("jm")) {//comprobamos si se crea o se modifica
-		        	indexSearcher.setSimilarity(new LMJelinekMercerSimilarity(lambda));
-		             } else if(iModel.equalsIgnoreCase("bm25")) {  // Add new documents to an existing index:
-		            	 indexSearcher.setSimilarity(new BM25Similarity(k1,(float) 0.75));
-		             } else {
-		            	 System.err.println("Wrong similarity Mode");
-				         System.exit(1);
-		             }
+		//para la creacion de la clase analyzer (indica que el metodo nueva INTANCIA DE CLASS ESTA OBSOLETO
+public static void main(String[] args) throws Exception {
+
+	List<CovidDocument> docu = null;		
+				
+	 //Variables necesarias podemos inicializarlas en el main y pasarlas como parametros si es necesario
+	String index = null;
+	String docs = null;
+	String openMode= null;
+	String iModel = null; //o esto o el bool de abajo que son dos tipos y requieren un float como parametro??
+	float lambda = 0;
+	float k1 = 0;
+	//int numThreads = Runtime.getRuntime().availableProcessors();
+	int numThreads =1;
+	//string the ayuda en caso de fallo
+    String usage =
+        "IndexTrecCovid"
+            + " [-index INDEX_PATH] [-docs DOCS_PATH] [-openmode mode] [-indexingmodel model value] \n\n"
+            + "This indexes the documents in DOCS_PATH, creating a Lucene index";
+   
+//comprobamos que tenemos los argumentos necesarios
+    if (args.length <9) {
+		System.out.println("A folder is needed for the index");
+		  System.err.println("Usage: " + usage);
+	      System.exit(1);
+	}
+    
+			    
+    for (int i = 0; i < args.length; i++) {
+      switch (args[i]) {
+        case "-index":
+          index = args[++i];
+          break;
+        case "-docs":
+          docs = args[++i];
+          break;
+        case "-openmode":
+           openMode = args[++i];
+          break;
+        case "-indexingmodel":
+        	iModel=args[++i];
+          if (iModel.equals("jm")){
+		  lambda = Float.valueOf(args[++i]);
+		  }else {
+		  k1 = Float.valueOf(args[++i]);
+	      }
+          break;
+        default:
+          throw new IllegalArgumentException("unknown parameter " + args[i]);
+      }
+    }
+
+    if (index == null) {
+      System.err.println("Usage: " + usage);
+      System.exit(1);
+    }
+    
+    if (docs == null) {
+	      System.err.println("Usage: " + usage);
+	      System.exit(1);
+	      }
+	    
+    //generacion de pool de hilos
+    ExecutorService executorService = Executors.newFixedThreadPool(numThreads);	    	    
+    try {
+        //comprobamos y cargamos el analyzer que se va a utilizar
 		   
-				for(Query qr : toExam) {
-					String queryText= qr.metadata().query().toLowerCase();
-	                TopDocs topDocs = null;
-	                MultiFieldQueryParser parser = new MultiFieldQueryParser(new String[]{"text"}, analyzer);
-					try {
-						topDocs = indexSearcher.search(parser.parse(queryText), topN);
-					} catch (IOException | ParseException e) {
-						System.err.println(" caught a " + e.getClass() + "\n with message: " + e.getMessage());
-				         System.exit(1);
-					}
-					HashMap<String, Integer> judgmentsMap = toHash( loadJudgments(Integer.valueOf(qr.id())));
-					
-					double[] aux = calculate(indexReader, topDocs, judgmentsMap, cut,qr,path, path2);
-					promedios = sumados(promedios, aux);
-				}
-			  
-			        indexReader.close();
-			        dir.close();
-			        
-			        String[] toSave={ "promedios",String.valueOf(promedios[0]/toExam.size()), String.valueOf(promedios[1]/toExam.size()), 
-			        		String.valueOf(promedios[2]/toExam.size()) , String.valueOf(promedios[3]/toExam.size())};
-			        writeToFile2(path2, toSave);
-			        
-			} catch (CorruptIndexException e1) {
-				System.out.println(" caught a " + e1.getClass() + "\n with message: " + e1.getMessage());
-				e1.printStackTrace();
-				return;
-			} catch (IOException e1) {
-				System.out.println(" caught a " + e1.getClass() + "\n with message: " + e1.getMessage());
-				e1.printStackTrace();
-				return;
-			}
-	    }
+		        
+		        //Para procesar en cada hilo
+		        final String finalINDEX_PATH = index;
+		        final String finalopenMode = openMode;
+		        final String finaliMode = iModel;
+		        final float finallambda = lambda;
+		        final float finalK1 = k1;
+		        
+		        var is = IndexTreeCovid.class.getResourceAsStream(docs);
+		        ObjectReader reader = JsonMapper.builder().findAndAddModules().build()
+		                .readerFor(CovidDocument.class);
+		        try {
+		            docu = reader.<CovidDocument>readValues(is).readAll();
+		        } catch (IOException e) {
+		        	System.err.println("Usage: " + usage);
+		            System.exit(1);
+		        }   
+		       
+		        while(!docu.isEmpty()) {
+		        	final List<CovidDocument>[] dc =  share(docu, numThreads);///cambiar reparto
+                executorService.submit(()-> {
+		         insertToIndex(finalINDEX_PATH,dc, finalopenMode, finaliMode,finallambda,finalK1);
+                   } );
+		            }
+		            
+		 	     
+		            while (!executorService.isTerminated()) {
+		                //Comprueba si los hilos han acabado 
+		            }
+		            long elapsedTime = System.currentTimeMillis() ;
+		            System.out.println("Created index in " + elapsedTime + " milliseconds");
+		        
 
-	 private static double[] sumados(double[] promedios, double[] aux) {
-		if(promedios== null) {
-			return aux;
-		}else {
-			for (int i = 0; i < aux.length; i++) {
-				promedios[i]= promedios[i] + aux[i];	
-			}
-			return promedios;
-		}
-		
-	}
+		    } finally {
+		        // se cierra la pool de hilos
+		        executorService.shutdown();
+		        
+		        System.exit(1);
+		    }
+    
 
-	/**
-	  * Funcion que revisa las queries para evitar problemas de vocabulario
-	  * @param all boolean que indica si se seben usar todas las queries de la lista
-	  * @param start Indice de la primera query a revisar
-	  * @param end Indice de la ultima query a revisar
-	  * @param queries lista de todas las queries parseadas del jason
-	  * @return
-	 * @throws IOException 
-	  */
-	    private static List<Query> selectQueries(boolean all, int start, int end) throws IOException {
-	    	var is = IndexTreeCovid.class.getResourceAsStream( "/trec-covid/queries.jsonl");
-	        ObjectReader reader = JsonMapper.builder().findAndAddModules().build()
-	                .readerFor(Query.class);
-	        
-	        List<Query> queries = reader.<Query>readValues(is).readAll();
-	    	
-	    	if(all) {
-	    		 return queries;
-	    		
-	    	}else {
-	    		List<Query> selection = new ArrayList<Query>();
-	    		for (int i = start; i<= end; i++) {
-	    			selection.add(queries.get(i));
-	    		}
-	    		return selection;
-	    	}
-	}
-
-	    /**
-	     *Funcion que devuelve los juicios de valor de la query que se esta analizando 
-	     * @int query id
-	     * @return Lista de Judgment
-	     * @throws IOException
-	     */
-	     private static List<Judgments> loadJudgments(int start) throws IOException {
-	    	        
-	    	        
-	    	        var is = IndexTreeCovid.class.getResourceAsStream( "/trec-covid/qrels/test.tsv");	        
-	    	        List<Judgments>jmts = new ArrayList<Judgments>();
-	    	        
-	    	        try (Scanner scanner = new Scanner(is)) {
-	    	            while (scanner.hasNextLine()) {
-	    	                String line = scanner.nextLine();
-	    	                String[] parts = line.split("\t");
-	    	                if (!(parts[0].compareToIgnoreCase("query-id")==0)) {
-		    	                if (parts.length == 3) {
-		    	                    int queryId = Integer.parseInt(parts[0]);
-		    	                    String corpusId = parts[1];
-		    	                    int score = Integer.parseInt(parts[2]);
-		    	                   jmts.add(new Judgments(queryId, corpusId, score));
-		    	                }
-	    	                }
-	    	            }
-	    	            List<Judgments> selection = new ArrayList<Judgments>();
-	    	    		for (Judgments j : jmts) {
-	    	    			if (j.query()== start) {
-	    	    				selection.add(j);
-	    	    			}
-	    	    		}
-	    	    		return selection;
-	    	       
-	   	    	}
-	    	        }
-
-	     private static HashMap<String, Integer> toHash (List<Judgments> jmts){
-	    	
-	    	 HashMap<String, Integer> selection = new HashMap<String, Integer>();
-	    		for (Judgments j : jmts) {
-	    			if (j.score()>0) {
-	    				selection.put(j.corpus(),j.score());
-	    			}
-	    		}
-	    		return selection;
-	     }
-	    	    
-
-	/**
-	 * Funcion que escribe en archivo txt
-	 * @param filepath path del archivo que debe escribir
-	 * @param line linea que añade al archivo
-	 * @throws IOException
-	 */
-	     private static void writeToFile(String filepath, String line) throws IOException {
-	 	    try (BufferedWriter writer = Files.newBufferedWriter(Paths.get(filepath), StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.APPEND)) {
-	 	        writer.write(line);
-	 	        writer.newLine();
-	 	    }catch(IOException e){
-	 			System.out.println("Impossible to write on file");
-	 	}
-	 	}
-	     /**
-	      * Funcion que escribe en cvs
-	      * @param filepath
-	      * @param line
-	      * @throws IOException
-	      */
-	private static void writeToFile2(String filepath, String[] line) throws IOException {
-		char delimitador = '\t'; // Tabulador como delimitador
-        char quotechar = '"';    // Carácter de comillas
-        char escapechar = '\\';  // Carácter de escape
-        String lineEnd = "\n";   // Terminador de línea
-	    try (CSVWriter writer = new CSVWriter(new FileWriter(filepath,true), delimitador, quotechar, escapechar, lineEnd)) {
-	        writer.writeNext(line,false);
-	    }catch(IOException e){
-			System.out.println("Impossible to write on file");
-	}
-	}
+}
+    	
+	
+	 private static void insertToIndex(String INDEX_Path,List[] Coc ,  String finalopenMode, 
+			 	String finaliMode, float finallambda, float finalK1) {  
+		 		int aux = (int)Thread.currentThread().getId();      
+		 List<CovidDocument> Cdoc = Coc[(int) Thread.currentThread().getId()];
 		 
-	/**
-	 * @throws IOException 
-	 */
-	public static double[] calculate(IndexReader indexReader ,TopDocs topDocs, HashMap<String, Integer> judgmentsMap,int cut, Query q, String path, String path2 ) throws IOException  {
-		    int relevantes = 0;  
-		    double acumulador = 0;
-		    double reverse = 0;
-		    for (int i = 0 ; i < cut; i++) {
-				Document auc = indexReader.storedFields().document(topDocs.scoreDocs[i].doc) ;
-		    // scoreDoc.doc contiene el número de documento
-			    if( judgmentsMap.containsKey(  auc.getValues("id")[0])) {
-			    	relevantes ++;
-			    	acumulador = acumulador+ ((double)relevantes/(i+1));  
-			    	reverse = reverse +(double) (1.0 /(i+1)); 
-			    }
-		    }
-		        // Calculate metrics
-	            double pAtN = (double) relevantes/cut;
-	            double recallAtN = (double)relevantes/judgmentsMap.size();
-	            double mapAtN =(double) acumulador/judgmentsMap.size();
-	            double mrr =(double) reverse/cut;
-	
-	            String toSave= "query " + q.id() + " " + q.metadata().query();
-        		System.out.println(toSave);
-        		writeToFile(path, toSave);
-        		
-        		toSave = " P@N: " + pAtN +" Recall@N: " + recallAtN + " MAP@N: " + mapAtN + " MRR: " + mrr;
-        		System.out.println(toSave);
-        		writeToFile(path, toSave);
-        		
-        		toSave = q.id()+ ", " +  pAtN + ", "+ recallAtN+ ", "+ mapAtN + ", " + mrr;
-        		writeToFile(path2, toSave);
-        		double[] data = { pAtN, recallAtN ,mapAtN , mrr};
-        		return data;
-		      
-		    }
-	
-
-	   
+		 try {
+	         // Configurar el directorio de índice
+	          Directory dir = FSDirectory.open(Paths.get(INDEX_Path));
+	          // Configurar el analizador de consultas
+	          IndexWriterConfig iwc = new IndexWriterConfig(new StandardAnalyzer());
+	          
+	          if (finaliMode.equalsIgnoreCase("jm")) {//comprobamos si se crea o se modifica
+	               iwc.setSimilarity(new LMJelinekMercerSimilarity(finallambda));
+	             } else if(finaliMode.equalsIgnoreCase("bm25")) {  // Add new documents to an existing index:
+	               iwc.setSimilarity(new BM25Similarity(finalK1,(float) 0.75));
+	             } else {
+	            	 System.err.println("Wrong similarity Mode");
+			            System.exit(1);
+	             }
+	          
+	             if (finalopenMode.equalsIgnoreCase("create")) {//comprobamos si se crea o se modifica
+	               iwc.setOpenMode(OpenMode.CREATE);
+	             } else if(finalopenMode.equalsIgnoreCase("create_or_append")) {  // Add new documents to an existing index:
+	               iwc.setOpenMode(OpenMode.CREATE_OR_APPEND);
+	             } else if (finalopenMode.equalsIgnoreCase("append")) {
+	            	 iwc.setOpenMode(OpenMode.APPEND);
+	             }else {
+	            	 System.err.println("Wrong open Mode");
+			            System.exit(1);
+	             }  
+	             
+	  	        try (// Crear un escritor de índice
+				IndexWriter writer = new IndexWriter(dir, iwc)) {
+						//añadimos el archivo
+		  	        	if (finalopenMode.equalsIgnoreCase("create")) {//comprobamos si se crea o se modifica
+		  	        		create(Cdoc, writer);
+		  	        	} else  {  // Add new documents to an existing index:
+		  	        		create_add(Cdoc, writer);
+		  	        	} 
+	  	        writer.close(); 
+	  	        	}
+	  	        } catch(LockObtainFailedException e) {
+	  	        	System.out.println("Retry indexing ");
+	  	        	
+			 try {
+				 Thread.sleep(new Random().nextInt(3000));
+				 insertToIndex(  INDEX_Path, Coc ,   finalopenMode, 
+							 finaliMode, finallambda,  finalK1);
+			} catch (InterruptedException e1) {
+			 
+				System.err.println(" caught a " + e.getClass() + "\n with message: " + e.getMessage());
+	            System.exit(1);
+			 }
+		} catch (FileSystemException exc){
+			 insertToIndex(  INDEX_Path, Coc ,   finalopenMode, 
+						 finaliMode, finallambda,  finalK1);
+			
+			
+		} catch (Exception e) {
+		 
+	             System.out.println(" caught a " + e.getClass() + "\n with message: " + e.getMessage());  
+	             System.exit(1);
+	           		  
 	}
+		       
+}
+	 
+	 @SuppressWarnings("null")
+	public static List[] share (List<CovidDocument> docu, int numThreads){
+		 	int size = docu.size();
+	        int chunk = size/numThreads;
+	        
+	        
+	        List[] toReturn = new ArrayList[numThreads];
+	        for(int j=0; j< numThreads; j++) {
+	        	
+	        	 List<CovidDocument> toAux = new ArrayList<CovidDocument>();
+		        	for (int i = 0;  i < chunk; i++ ) {
+		        
+		        		CovidDocument aux = (docu.remove(0));
+		        		toAux.add(aux);
+		        	}
+		        	toReturn[j] = toAux;
+	        	}
+	        
+	        return toReturn;
+	 }
+	 
+	 
+	 public static void create_add (List<CovidDocument> docu, IndexWriter writer ) throws IOException {
+		 for(CovidDocument Cdoc : docu) {
+			 org.apache.lucene.document.Document doc = new org.apache.lucene.document.Document();
+		       	doc.add(new KeywordField("id", Cdoc.id(), Field.Store.YES));
+		       	doc.add(new TextField("title", Cdoc.title(), Field.Store.YES));
+		       	doc.add(new TextField("text", Cdoc.text(), Field.Store.YES));
+		       	doc.add(new StringField("url", Cdoc.metadata().url(), Field.Store.YES));
+		       	doc.add(new StringField("pubmed_id", Cdoc.metadata().pubmed_id(), Field.Store.YES));
+		       	writer.updateDocument(new org.apache.lucene.index.Term("path", doc.toString()), doc);
+	        		
+		 }
+		 
+	 }
+  
+	 
+	 public static void create (List<CovidDocument> docu, IndexWriter writer ) throws IOException {
+		 for(CovidDocument Cdoc : docu) {
+			 org.apache.lucene.document.Document doc = new org.apache.lucene.document.Document();
+		       	doc.add(new KeywordField("id", Cdoc.id(), Field.Store.YES));
+		       	doc.add(new TextField("title", Cdoc.title(), Field.Store.YES));
+		       	doc.add(new TextField("text", Cdoc.text(), Field.Store.YES));
+		       	doc.add(new StringField("url", Cdoc.metadata().url(), Field.Store.YES));
+		       	doc.add(new StringField("pubmed_id", Cdoc.metadata().pubmed_id(), Field.Store.YES));
+		       	writer.addDocument(doc);
+	        	
+		 }
+		 
+	 }
+	 
+		//funcion de cierre de los hilos
+	 @Override
+	 public void close() throws Exception {
+			
+		}
+
+	}
+
 
