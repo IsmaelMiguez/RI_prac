@@ -223,7 +223,7 @@ public static void main(String[] args) throws Exception {
 		        		CovidDocument aux = (docu.remove(0));
 		        		toAux.add(aux);
 		        	}
-				if(j==(numThreads-1){
+				if(j==(numThreads-1)){
 				while(!docu.isEmpty()){
 
 					CovidDocument aux = (docu.remove(0));
