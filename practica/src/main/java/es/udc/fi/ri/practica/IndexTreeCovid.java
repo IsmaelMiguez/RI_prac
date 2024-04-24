@@ -8,6 +8,8 @@ import java.util.List;//https://docs.oracle.com/javase/8/docs/api/java/util/List
 import java.util.Random;
 import java.util.concurrent.ExecutorService;//https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/ExecutorService.html
 import java.util.concurrent.Executors;//https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/Executors.html
+import java.util.concurrent.TimeUnit;
+
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.document.Field;//https://lucene.apache.org/core/7_0_1/core/org/apache/lucene/document/Field.html
 //import org.apache.lucene.document.Field.TermVector//https://lucene.apache.org/core/5_4_1/core/org/apache/lucene/document/Field.TermVector.html
@@ -42,8 +44,8 @@ public static void main(String[] args) throws Exception {
 	String iModel = null; //o esto o el bool de abajo que son dos tipos y requieren un float como parametro??
 	float lambda = 0;
 	float k1 = 0;
-	//int numThreads = Runtime.getRuntime().availableProcessors();
-	int numThreads =1;
+	int numThreads = Runtime.getRuntime().availableProcessors();
+	//int numThreads =1;
 	//string the ayuda en caso de fallo
     String usage =
         "IndexTrecCovid"
@@ -114,25 +116,44 @@ public static void main(String[] args) throws Exception {
 		        	System.err.println("Usage: " + usage);
 		            System.exit(1);
 		        }   
-		       
-		        while(!docu.isEmpty()) {
-		        	final List<CovidDocument>[] dc =  share(docu, numThreads);///cambiar reparto
-                executorService.submit(()-> {
-		         insertToIndex(finalINDEX_PATH,dc, finalopenMode, finaliMode,finallambda,finalK1);
-                   } );
-		            }
+		     // Después de leer todos los documentos
+		        int blockSize = docu.size() / numThreads;
+		        List<DocumentBlock> documentBlocks = new ArrayList<>();
+
+		        for (int i = 0; i < numThreads; i++) {
+		            int start = i * blockSize;
+		            int end = (i == numThreads - 1) ? docu.size() : (i + 1) * blockSize;
+		            List<CovidDocument> block = docu.subList(start, end);
+		            documentBlocks.add(new DocumentBlock(block));
+		        }
+
+		        // Usar documentBlocks en lugar de docu para enviar a los hilos
+		        documentBlocks.forEach(block -> executorService.submit(() -> {
 		            
+		                insertToIndex(finalINDEX_PATH, block, finalopenMode, finaliMode, finallambda, finalK1);
+		            
+		        }));
+
 		 	     
+		        executorService.shutdown();   
+		           
 		            while (!executorService.isTerminated()) {
 		                //Comprueba si los hilos han acabado 
+		            	 if (!executorService.awaitTermination(70, TimeUnit.SECONDS)) {
+			                    // Si el tiempo de espera expira, se puede imprimir un mensaje o tomar otra acción apropiada
+			                    System.err.println("El tiempo de espera ha expirado mientras se esperaba la finalización de las tareas del pool de hilos.");
+			                
+		            	 }
+		            		
 		            }
-		            long elapsedTime = System.currentTimeMillis() ;
-		            System.out.println("Created index in " + elapsedTime + " milliseconds");
+		            executorService.shutdown();
+		          
+		            System.out.println("Created index");
 		        
 
 		    } finally {
 		        // se cierra la pool de hilos
-		        executorService.shutdown();
+		 
 		        
 		        System.exit(1);
 		    }
@@ -141,10 +162,9 @@ public static void main(String[] args) throws Exception {
 }
     	
 	
-	 private static void insertToIndex(String INDEX_Path,List[] Coc ,  String finalopenMode, 
+	 private static void insertToIndex(String INDEX_Path,DocumentBlock block,  String finalopenMode, 
 			 	String finaliMode, float finallambda, float finalK1) {  
-		 		int aux = (int)Thread.currentThread().getId();      
-		 List<CovidDocument> Cdoc = Coc[(int) Thread.currentThread().getId()];
+
 		 
 		 try {
 	         // Configurar el directorio de índice
@@ -176,9 +196,9 @@ public static void main(String[] args) throws Exception {
 				IndexWriter writer = new IndexWriter(dir, iwc)) {
 						//añadimos el archivo
 		  	        	if (finalopenMode.equalsIgnoreCase("create")) {//comprobamos si se crea o se modifica
-		  	        		create(Cdoc, writer);
+		  	        		create(block, writer);
 		  	        	} else  {  // Add new documents to an existing index:
-		  	        		create_add(Cdoc, writer);
+		  	        		create_add(block, writer);
 		  	        	} 
 	  	        writer.close(); 
 	  	        	}
@@ -187,7 +207,7 @@ public static void main(String[] args) throws Exception {
 	  	        	
 			 try {
 				 Thread.sleep(new Random().nextInt(3000));
-				 insertToIndex(  INDEX_Path, Coc ,   finalopenMode, 
+				 insertToIndex(  INDEX_Path, block ,   finalopenMode, 
 							 finaliMode, finallambda,  finalK1);
 			} catch (InterruptedException e1) {
 			 
@@ -195,7 +215,7 @@ public static void main(String[] args) throws Exception {
 	            System.exit(1);
 			 }
 		} catch (FileSystemException exc){
-			 insertToIndex(  INDEX_Path, Coc ,   finalopenMode, 
+			 insertToIndex(  INDEX_Path, block ,   finalopenMode, 
 						 finaliMode, finallambda,  finalK1);
 			
 			
@@ -208,62 +228,43 @@ public static void main(String[] args) throws Exception {
 		       
 }
 	 
-	 @SuppressWarnings("null")
-	public static List[] share (List<CovidDocument> docu, int numThreads){
-		 	int size = docu.size();
-	        int chunk = size/numThreads;
-	        
-	        
-	        List[] toReturn = new ArrayList[numThreads];
-	        for(int j=0; j< numThreads; j++) {
-	        	
-	        	 List<CovidDocument> toAux = new ArrayList<CovidDocument>();
-		        	for (int i = 0;  i < chunk; i++ ) {
-		        
-		        		CovidDocument aux = (docu.remove(0));
-		        		toAux.add(aux);
-		        	}
-				if(j==(numThreads-1)){
-				while(!docu.isEmpty()){
 
-					CovidDocument aux = (docu.remove(0));
-		        		toAux.add(aux);
-				}
-				}
-			
-		        	toReturn[j] = toAux;
-	        	}
-	        
-	        return toReturn;
-	 }
 	 
 	 
-	 public static void create_add (List<CovidDocument> docu, IndexWriter writer ) throws IOException {
-		 for(CovidDocument Cdoc : docu) {
+	 public static void create_add (DocumentBlock wblock, IndexWriter writer ) throws IOException {
+		
+		 wblock.getDocuments().forEach(block -> {
 			 org.apache.lucene.document.Document doc = new org.apache.lucene.document.Document();
-		       	doc.add(new KeywordField("id", Cdoc.id(), Field.Store.YES));
-		       	doc.add(new TextField("title", Cdoc.title(), Field.Store.YES));
-		       	doc.add(new TextField("text", Cdoc.text(), Field.Store.YES));
-		       	doc.add(new StringField("url", Cdoc.metadata().url(), Field.Store.YES));
-		       	doc.add(new StringField("pubmed_id", Cdoc.metadata().pubmed_id(), Field.Store.YES));
-		       	writer.updateDocument(new org.apache.lucene.index.Term("path", doc.toString()), doc);
-	        		
-		 }
-		 
+		       	doc.add(new KeywordField("id", block.id(), Field.Store.YES));
+		       	doc.add(new TextField("title", block.title(), Field.Store.YES));
+		       	doc.add(new TextField("text", block.text(), Field.Store.YES));
+		       	doc.add(new StringField("url", block.metadata().url(), Field.Store.YES));
+		       	doc.add(new StringField("pubmed_id", block.metadata().pubmed_id(), Field.Store.YES));
+		       	try {
+					writer.updateDocument((new org.apache.lucene.index.Term("path", doc.toString())), doc);
+				} catch (IOException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				};});
 	 }
   
 	 
-	 public static void create (List<CovidDocument> docu, IndexWriter writer ) throws IOException {
-		 for(CovidDocument Cdoc : docu) {
+	 public static void create (DocumentBlock wblock, IndexWriter writer ) throws IOException {
+		 wblock.getDocuments().forEach(block -> {
 			 org.apache.lucene.document.Document doc = new org.apache.lucene.document.Document();
-		       	doc.add(new KeywordField("id", Cdoc.id(), Field.Store.YES));
-		       	doc.add(new TextField("title", Cdoc.title(), Field.Store.YES));
-		       	doc.add(new TextField("text", Cdoc.text(), Field.Store.YES));
-		       	doc.add(new StringField("url", Cdoc.metadata().url(), Field.Store.YES));
-		       	doc.add(new StringField("pubmed_id", Cdoc.metadata().pubmed_id(), Field.Store.YES));
-		       	writer.addDocument(doc);
+		       	doc.add(new KeywordField("id", block.id(), Field.Store.YES));
+		       	doc.add(new TextField("title", block.title(), Field.Store.YES));
+		       	doc.add(new TextField("text", block.text(), Field.Store.YES));
+		       	doc.add(new StringField("url", block.metadata().url(), Field.Store.YES));
+		       	doc.add(new StringField("pubmed_id", block.metadata().pubmed_id(), Field.Store.YES));
+		       	try {
+					writer.addDocument(doc);
+				} catch (IOException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				};});
 	        	
-		 }
+	
 		 
 	 }
 	 
@@ -271,9 +272,12 @@ public static void main(String[] args) throws Exception {
 	 @Override
 	 public void close() throws Exception {
 			
-		}
+	
+
 
 	}
+	 }
+	 
 
 
 
