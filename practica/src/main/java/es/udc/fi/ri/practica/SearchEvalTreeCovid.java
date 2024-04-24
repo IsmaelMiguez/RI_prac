@@ -124,12 +124,16 @@ public class SearchEvalTreeCovid {
 		        analyzer  = (new StandardAnalyzer());
 		        String path= "TREC-COVID."+iModel+"."+topN+".hits."+forPath+".q."+q+".txt";
 				String path2= "TREC-COVID."+iModel+"."+topN+".hits."+forPath+".q."+q+".csv";
-				String[] toSa =  {"query ", "P@N ","Recall@N ", "MAP@N ", "MRR "}  ;
-				writeToFile2(path2, toSa);
+				String[] toSa =  {"query ", "P@N ","Recall@N ", "MAP@N ", "MRR "};
+				if (iModel.equals("jm"))
+					 writeToFile2(path2, toSa, cut, iModel, lambda, q);
+				else
+					writeToFile2(path2, toSa, cut, iModel, k1, q);
+						  
+			
 				
-				//orden de las metricas en este array p@n recal@n Map@n mrr
 				double[] promedios = {0,0,0,0};
-		        if (iModel.equalsIgnoreCase("jm")) {//comprobamos si se crea o se modifica
+		        if (iModel.equalsIgnoreCase("jm")) {
 		        	indexSearcher.setSimilarity(new LMJelinekMercerSimilarity(lambda));
 		             } else if(iModel.equalsIgnoreCase("bm25")) {  // Add new documents to an existing index:
 		            	 indexSearcher.setSimilarity(new BM25Similarity(k1,(float) 0.75));
@@ -150,19 +154,19 @@ public class SearchEvalTreeCovid {
 					}
 					HashMap<String, Integer> judgmentsMap = toHash( loadJudgments(Integer.valueOf(qr.id())));
 					
-					double[] aux = calculate(indexReader, topDocs, judgmentsMap, cut,qr,path, path2);
+					double[] aux = calculate(indexReader, topDocs, judgmentsMap, cut,qr,path, path2, iModel, lambda, k1 );
 					promedios = sumados(promedios, aux);
 				}
 			  
 			        indexReader.close();
 			        dir.close();
-			        System.out.println("promedios:  P@N: " + String.valueOf(promedios[0]/toExam.size()) +" Recall@N: " + String.valueOf(promedios[1]/toExam.size()) + " MAP@N: " 
-					        + String.valueOf(promedios[2]/toExam.size()) + " MRR: " + String.valueOf(promedios[3]/toExam.size()));
-			        writeToFile(path,"promedios:  P@N: " + String.valueOf(promedios[0]/toExam.size()) +" Recall@N: " + String.valueOf(promedios[1]/toExam.size()) + " MAP@N: " 
-			        + String.valueOf(promedios[2]/toExam.size()) + " MRR: " + String.valueOf(promedios[3]/toExam.size()));
+			        
 			        String[] toSave={ "promedios",String.valueOf(promedios[0]/toExam.size()), String.valueOf(promedios[1]/toExam.size()), 
 			        		String.valueOf(promedios[2]/toExam.size()) , String.valueOf(promedios[3]/toExam.size())};
-			        writeToFile2(path2, toSave);
+			        if (iModel.equals("jm"))
+						 writeToFile2(path2, toSave, cut, iModel, lambda, q);
+					else
+						writeToFile2(path2, toSave, cut, iModel, k1, q);
 			        
 			} catch (CorruptIndexException e1) {
 				System.out.println(" caught a " + e1.getClass() + "\n with message: " + e1.getMessage());
@@ -172,10 +176,7 @@ public class SearchEvalTreeCovid {
 				System.out.println(" caught a " + e1.getClass() + "\n with message: " + e1.getMessage());
 				e1.printStackTrace();
 				return;
-		    } finally {
-		        
-		        System.exit(1);
-		    }
+			}
 	    }
 
 	 private static double[] sumados(double[] promedios, double[] aux) {
@@ -286,22 +287,25 @@ public class SearchEvalTreeCovid {
 	      * @param line
 	      * @throws IOException
 	      */
-	private static void writeToFile2(String filepath, String[] line) throws IOException {
-		char delimitador = '\t'; // Tabulador como delimitador
-        char quotechar = '"';    // Carácter de comillas
-        char escapechar = '\\';  // Carácter de escape
-        String lineEnd = "\n";   // Terminador de línea
-	    try (CSVWriter writer = new CSVWriter(new FileWriter(filepath,true), delimitador, quotechar, escapechar, lineEnd)) {
-	        writer.writeNext(line,false);
-	    }catch(IOException e){
-			System.out.println("Impossible to write on file");
-	}
-	}
+	     private static void writeToFile2(String filepath, String[] line, int cut, String iModel, float value, String queriesRange) throws IOException {
+	    	    char delimitador = ','; // Coma como delimitador
+	    	    char quotechar = '"';    // Carácter de comillas
+	    	    char escapechar = '\\';  // Carácter de escape
+	    	    String lineEnd = "\n";   // Terminador de línea
+
+	    	    try (CSVWriter writer = new CSVWriter(new FileWriter(filepath, true), delimitador, quotechar, escapechar, lineEnd)) {
+	    	        writer.writeNext(new String[]{"Query", "P@N", "Recall@N", "MAP@N", "MRR", "Corte N", "Modelo", "Valor", "Rango"}, false);
+	    	        writer.writeNext(line, false);
+	    	    } catch (IOException e) {
+	    	        System.out.println("Impossible to write on file");
+	    	    }
+	    	}
+
 		 
 	/**
 	 * @throws IOException 
 	 */
-	public static double[] calculate(IndexReader indexReader ,TopDocs topDocs, HashMap<String, Integer> judgmentsMap,int cut, Query q, String path, String path2 ) throws IOException  {
+	public static double[] calculate(IndexReader indexReader ,TopDocs topDocs, HashMap<String, Integer> judgmentsMap,int cut, Query q, String path, String path2, String iModel, float lambda, float k1 ) throws IOException  {
 		    int relevantes = 0;  
 		    double acumulador = 0;
 		    double reverse = 0;
@@ -317,10 +321,13 @@ public class SearchEvalTreeCovid {
 		        // Calculate metrics
 	            double pAtN = (double) relevantes/cut;
 	            double recallAtN = (double)relevantes/judgmentsMap.size();
-	            double mapAtN =(double) acumulador/judgmentsMap.size(); // revisar formula si  
+	            double mapAtN =(double) acumulador/judgmentsMap.size();
+	            //Revisar formula:
+	            //double mapAtN =(double) acumulador/cut;
 	            double mrr =(double) reverse/cut;
 	
 	            String toSave= "query " + q.id() + " " + q.metadata().query();
+	            String[] toSave2 = {q.id(),String.valueOf(pAtN),String.valueOf(recallAtN), String.valueOf(mapAtN),String.valueOf(mrr)};
         		System.out.println(toSave);
         		writeToFile(path, toSave);
         		
@@ -328,14 +335,17 @@ public class SearchEvalTreeCovid {
         		System.out.println(toSave);
         		writeToFile(path, toSave);
         		
-        		String[] toSa = { q.id(), String.valueOf( pAtN)  , String.valueOf(recallAtN),  String.valueOf(mapAtN), String.valueOf( mrr)};
-        		writeToFile2(path2, toSa);
+        		toSave = q.id()+ ", " +  pAtN + ", "+ recallAtN+ ", "+ mapAtN + ", " + mrr;
+        
+        		if (iModel.equals("jm"))
+					 writeToFile2(path2, toSave2, cut, iModel, lambda, String.valueOf(q));
+				else
+					writeToFile2(path2, toSave2, cut, iModel, k1, String.valueOf(q));
         		double[] data = { pAtN, recallAtN ,mapAtN , mrr};
         		return data;
 		      
 		    }
-	
+
 
 	   
 	}
-
