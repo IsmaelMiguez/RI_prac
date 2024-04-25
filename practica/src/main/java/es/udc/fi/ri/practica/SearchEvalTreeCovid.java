@@ -125,13 +125,7 @@ public class SearchEvalTreeCovid {
 		        String path= "TREC-COVID."+iModel+"."+topN+".hits."+forPath+".q."+q+".txt";
 				String path2= "TREC-COVID."+iModel+"."+topN+".hits."+forPath+".q."+q+".csv";
 				String[] toSa =  {"query ", "P@N ","Recall@N ", "MAP@N ", "MRR "};
-				if (iModel.equals("jm"))
-					 writeToFile2(path2, toSa, cut, iModel, lambda, q);
-				else
-					writeToFile2(path2, toSa, cut, iModel, k1, q);
-						  
-			
-				
+				writeToFile2(path2, toSa);				
 				double[] promedios = {0,0,0,0};
 		        if (iModel.equalsIgnoreCase("jm")) {
 		        	indexSearcher.setSimilarity(new LMJelinekMercerSimilarity(lambda));
@@ -163,10 +157,7 @@ public class SearchEvalTreeCovid {
 			        
 			        String[] toSave={ "promedios",String.valueOf(promedios[0]/toExam.size()), String.valueOf(promedios[1]/toExam.size()), 
 			        		String.valueOf(promedios[2]/toExam.size()) , String.valueOf(promedios[3]/toExam.size())};
-			        if (iModel.equals("jm"))
-						 writeToFile2(path2, toSave, cut, iModel, lambda, q);
-					else
-						writeToFile2(path2, toSave, cut, iModel, k1, q);
+			        writeToFile2(path2, toSave);
 			        
 			} catch (CorruptIndexException e1) {
 				System.out.println(" caught a " + e1.getClass() + "\n with message: " + e1.getMessage());
@@ -287,14 +278,14 @@ public class SearchEvalTreeCovid {
 	      * @param line
 	      * @throws IOException
 	      */
-	     private static void writeToFile2(String filepath, String[] line, int cut, String iModel, float value, String queriesRange) throws IOException {
+	     private static void writeToFile2(String filepath, String[] line) throws IOException {
 	    	    char delimitador = ','; // Coma como delimitador
 	    	    char quotechar = '"';    // Carácter de comillas
 	    	    char escapechar = '\\';  // Carácter de escape
 	    	    String lineEnd = "\n";   // Terminador de línea
 
 	    	    try (CSVWriter writer = new CSVWriter(new FileWriter(filepath, true), delimitador, quotechar, escapechar, lineEnd)) {
-	    	        writer.writeNext(new String[]{"Query", "P@N", "Recall@N", "MAP@N", "MRR", "Corte N", "Modelo", "Valor", "Rango"}, false);
+	    	        writer.writeNext(new String[]{"Query", "P@N", "Recall@N", "MAP@N", "MRR"}, false);
 	    	        writer.writeNext(line, false);
 	    	    } catch (IOException e) {
 	    	        System.out.println("Impossible to write on file");
@@ -336,11 +327,8 @@ public class SearchEvalTreeCovid {
         		writeToFile(path, toSave);
         		
         		toSave = q.id()+ ", " +  pAtN + ", "+ recallAtN+ ", "+ mapAtN + ", " + mrr;
-        
-        		if (iModel.equals("jm"))
-					 writeToFile2(path2, toSave2, cut, iModel, lambda, String.valueOf(q));
-				else
-					writeToFile2(path2, toSave2, cut, iModel, k1, String.valueOf(q));
+        		writeToFile2(path2, toSave2);
+        	
         		double[] data = { pAtN, recallAtN ,mapAtN , mrr};
         		return data;
 		      
