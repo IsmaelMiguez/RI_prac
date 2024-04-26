@@ -30,7 +30,7 @@ import com.fasterxml.jackson.databind.ObjectReader;
 import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.opencsv.CSVWriter;
 
-public class SearchEvalTreeCovid {
+public class SearchEvalTrecCovid {
 
 	 public static void main(String[] args) throws IOException, ParseException {
 		//string the ayuda en caso de fallo
@@ -79,7 +79,7 @@ public class SearchEvalTreeCovid {
 			        	 start=Integer.valueOf( queries[0])-1;
 			        	 end = Integer.valueOf( queries[1])-1;
 			        	 
-			        	  if (end>start) {
+			        	  if (end<start) {
 			        		  System.err.println("Query selecction is incorrect");
 			  	              System.exit(1);
 			        	  }
@@ -122,8 +122,8 @@ public class SearchEvalTreeCovid {
 				indexReader = DirectoryReader.open(dir);
 		        indexSearcher = new IndexSearcher(indexReader);
 		        analyzer  = (new StandardAnalyzer());
-		        String path= "TREC-COVID."+iModel+"."+topN+".hits."+forPath+".q."+q+".txt";
-				String path2= "TREC-COVID."+iModel+"."+topN+".hits."+forPath+".q."+q+".csv";
+		        String path= "target/classes/TREC-COVID."+iModel+"."+topN+".hits."+forPath+".q."+q+".txt";
+				String path2= "target/classes/TREC-COVID."+iModel+"."+topN+".hits."+forPath+".q."+q+".csv";
 				String[] toSa =  {"query ", "P@N ","Recall@N ", "MAP@N ", "MRR "};
 				writeToFile2(path2, toSa);				
 				double[] promedios = {0,0,0,0};
@@ -192,7 +192,7 @@ public class SearchEvalTreeCovid {
 	 * @throws IOException 
 	  */
 	    private static List<Query> selectQueries(boolean all, int start, int end) throws IOException {
-	    	var is = IndexTreeCovid.class.getResourceAsStream( "/trec-covid/queries.jsonl");
+	    	var is = IndexTrecCovid.class.getResourceAsStream( "/trec-covid/queries.jsonl");
 	        ObjectReader reader = JsonMapper.builder().findAndAddModules().build()
 	                .readerFor(Query.class);
 	        
@@ -219,7 +219,7 @@ public class SearchEvalTreeCovid {
 	     private static List<Judgments> loadJudgments(int start) throws IOException {
 	    	        
 	    	        
-	    	        var is = IndexTreeCovid.class.getResourceAsStream( "/trec-covid/qrels/test.tsv");	        
+	    	        var is = IndexTrecCovid.class.getResourceAsStream( "/trec-covid/qrels/test.tsv");	        
 	    	        List<Judgments>jmts = new ArrayList<Judgments>();
 	    	        
 	    	        try (Scanner scanner = new Scanner(is)) {
@@ -285,7 +285,7 @@ public class SearchEvalTreeCovid {
 	    	    String lineEnd = "\n";   // Terminador de línea
 
 	    	    try (CSVWriter writer = new CSVWriter(new FileWriter(filepath, true), delimitador, quotechar, escapechar, lineEnd)) {
-	    	        writer.writeNext(new String[]{"Query", "P@N", "Recall@N", "MAP@N", "MRR"}, false);
+	    	        
 	    	        writer.writeNext(line, false);
 	    	    } catch (IOException e) {
 	    	        System.out.println("Impossible to write on file");
