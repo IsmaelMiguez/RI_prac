@@ -20,18 +20,15 @@ import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexReader;
-import org.apache.lucene.queryparser.classic.MultiFieldQueryParser;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FSDirectory;
 
-import com.fasterxml.jackson.databind.ObjectReader;
-import com.fasterxml.jackson.databind.json.JsonMapper;
+import com.opencsv.CSVWriter;
 
 import org.apache.lucene.search.similarities.BM25Similarity;
 import org.apache.lucene.search.similarities.LMJelinekMercerSimilarity;
-import org.apache.lucene.search.similarities.Similarity;
 import org.apache.lucene.queryparser.classic.ParseException;
 import org.apache.lucene.queryparser.classic.QueryParser;
 
@@ -56,9 +53,8 @@ public class TrainingTestTrecCovid {
 		
 		
 	    String usage =
-	        "IndexTrecCovid"
-	            + " [-index INDEX_PATH] [-evaljm/-evalbm25] [-cut CUT_MODE] [-metrica METRICA_MODE] \n\n"
-	            + "This indexes the documents in DOCS_PATH, creating a Lucene index";
+	        "TrainingTestTrecCovid"
+	            + " [-index INDEX_PATH] [-evaljm | -evalbm25] [-cut CUT_MODE] [-metrica METRICA_MODE] \n\n";
 	   
 	//comprobamos que tenemos los argumentos necesarios
 	    if (args.length <7) {
@@ -76,7 +72,7 @@ public class TrainingTestTrecCovid {
 	        case "-evaljm":
 		          evaljm = true;
 		          p = args[++i];
-		          q = args[i+2];
+		          q = args[++i];
 		          String[] queries1 = p.split("-");
 		          int1 =Integer.valueOf( queries1[0])-1;
 		          int2 = Integer.valueOf( queries1[1])-1;
@@ -87,7 +83,7 @@ public class TrainingTestTrecCovid {
 	        case "-evalbm25":
 		          evalbm25 = true;
 		          p = args[++i];
-		          q = args[i+2];
+		          q = args[++i];
 		          String[] queries11 = p.split("-");
 		          int1 =Integer.valueOf( queries11[0])-1;
 		          int2 = Integer.valueOf( queries11[1])-1;
@@ -96,12 +92,13 @@ public class TrainingTestTrecCovid {
 		          int4 = Integer.valueOf( queries21[1])-1;
 	          break;	          
 	        case "-cut":
-	        	cut = Integer.valueOf(args[i++]);
+	        	cut = Integer.valueOf(args[++i]);
 	          break;
 	        case "-metrica":
-	        	metrica = args[i++];
+	        	metrica = args[++i];
+	        	break;
 	        default:
-	          throw new IllegalArgumentException("unknown parameter " + args[i]);
+	          throw new IllegalArgumentException("unknown parameter " + args[++i]);
 	      }
 	    }
 
@@ -110,28 +107,143 @@ public class TrainingTestTrecCovid {
 	      System.exit(1);
 	    }
 	    
-	    if (evaljm == true && evalbm25 == true) {
+	    if( (evaljm == true && evalbm25 == true)||(evaljm == false && evalbm25 == false)) {
 		      System.err.println(" evaljm and evalbm25 are not compatible. Only one option can be loaded");
 		      System.exit(1);
 		      }
+	    List<String> arg = new ArrayList<String>();
+	     arg.add("-index");
+   	 	 arg.add(index);
+	   	 arg.add("-queries");
+	   	 arg.add(p);
+	   	 arg.add("-cut");
+	   	 arg.add(String.valueOf(cut));
+	   	 arg.add("-top");
+	   	 arg.add(String.valueOf(100));
+	   	 arg.add("-search");
+	    List<String> arg2 =  new ArrayList<String>();
+	    arg2.add("-index");
+	   	 arg2.add(index);
+	   	 arg2.add("-queries");
+	   	 arg2.add(q);
+	   	 arg2.add("-cut");
+	   	 arg2.add(String.valueOf(cut));
+	   	 arg2.add("-top");
+	   	 arg2.add(String.valueOf(100));
+	   	 arg2.add("-search");
 	    
 	 // Ejecutar proceso de entrenamiento o prueba
-        if (evaljm) {
-            Map<Double, Double> resultadosEntrenamiento = processTraining("jm", index, int1, int2, cut, metrica);
-            Map<Double, Double> resultadosPrueba = processTest("jm", index, int3, int4, cut, metrica);
-            escribirResultados("jm.training." + (int1 + 1) + "-" + (int2 + 1), resultadosEntrenamiento, metrica);
-            escribirResultados("jm.test." + (int3 + 1) + "-" + (int4 + 1), resultadosPrueba, metrica);
+        if (evaljm) {//TO-DO PENDIENTE DE VER COMO ELABORAMOS LOS ARGUMENTOS A PASAR
+        	//crear el string de los argumentos
+        	
+        	 arg.add("jm");
+        	 arg2.add("jm");
+        	 
+        	
         } else if (evalbm25) {
-            Map<Double, Double> resultadosEntrenamiento = processTraining("bm25", index, int1, int2, cut, metrica);
-            Map<Double, Double> resultadosPrueba = processTest("bm25", index, int3, int4, cut, metrica);
-            escribirResultados("bm25.training." + (int1 + 1) + "-" + (int2 + 1), resultadosEntrenamiento, metrica);
-            escribirResultados("bm25.test." + (int3 + 1) + "-" + (int4 + 1), resultadosPrueba, metrica);
+        	//crear el string de los argumentos
+        	 arg.add("bm25");
+        	 arg2.add("bm25");
+        	
+        	  
         } else {
             System.err.println("Please specify either -evaljm or -evalbm25");
             System.exit(1);
         }
+        
+        HashMap<Double, Double> resultadosEntrenamiento = probarHiperparametros(arg, evaljm, metrica) ;
+        HashMap<Double, Double> resultadosPrueba = probarHiperparametros(arg2,evaljm, metrica);
+        //to do, extraer del Hashmap los valores mas altos.
+        escribirResultados("jm.training." + (int1 + 1) + "-" + (int2 + 1), resultadosEntrenamiento, metrica);
+        escribirResultados("jm.test." + (int3 + 1) + "-" + (int4 + 1), resultadosPrueba, metrica);
     }
     
+	
+	private static HashMap<Double, Double> probarHiperparametros(List<String> arg1, boolean evaljm ,String metrica) throws IOException, ParseException{
+		HashMap<Double, Double> resultados = new HashMap<Double, Double>();
+		 if (evaljm) {
+			 Double[] parametros  = {0.001,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0};
+				for(Double p : parametros ) {
+					arg1.add(String.valueOf(p));
+					 SearchEvalTrecCovid.main(arg1.toArray(new String[11]));
+					 String path= "/TREC-COVID."+arg1.get(9)+"."+arg1.get(5)+".hits.lambda."+p+".q."+arg1.get(3)+".csv";	
+					Estadisticos st = readStat(path);	
+				    resultados.put(p,writeStat(metrica,st));
+				    arg1.remove(String.valueOf(p));
+				    	
+				}
+		 }else {
+			 Double[] parametros = {0.4,0.6,0.8,1.0,1.2,1.4,1.6,1.8,2.0};
+				for(Double p : parametros ) {
+					arg1.add(String.valueOf(p));
+					 SearchEvalTrecCovid.main(arg1.toArray(new String[11]));
+					 String path= "/TREC-COVID."+arg1.get(9)+"."+arg1.get(5)+".hits.k1."+p+".q."+arg1.get(3);	
+					Estadisticos st = readStat(path);	
+				    resultados.put(p,writeStat(metrica,st));
+				    arg1.remove(String.valueOf(p));
+				    	
+				}
+		 }
+		return resultados;
+		
+	}
+	
+	private static Double  writeStat(String metrica,Estadisticos st) {
+		switch(metrica) {
+		case "PN": 
+			return st.PN();			
+		case "RecallN":
+			return st.RecallN();
+		case "MAPN":
+			return st.RecallN();
+		case "MRR": 
+			return st.RecallN();
+		default:
+			 throw new IllegalArgumentException("unknown parameter " + metrica);	
+		}
+	}
+
+
+	private static Estadisticos readStat(String path) {
+		 
+        var is = TrainingTestTrecCovid.class.getResourceAsStream(path);	        
+        Estadisticos stats;
+        
+        try (Scanner scanner = new Scanner(is)) {
+            while (scanner.hasNextLine()) {
+                String line = scanner.nextLine();
+                String[] parts = line.split(",");
+                if (parts[0].compareToIgnoreCase("promedios")==0) {
+	                if (parts.length == 5) {
+	                    double PN = Double.parseDouble(parts[1]);
+	                    double RecallN =  Double.parseDouble(parts[2]);;
+	                    double MAPN =  Double.parseDouble(parts[3]);;
+	                    double MRR =   Double.parseDouble(parts[4]);;
+	                   stats= new Estadisticos(PN, RecallN, MAPN, MRR);
+	                   return stats;
+	                }
+                }
+            }
+            return null;
+       
+   	}
+     
+	}
+
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
 	
 	private static Map<Double, Double> processTraining(String model, String indexPath, int start, int end, int cut, String metrica) throws IOException, ParseException {
 	    Map<Double, Double> resultados = new HashMap<>();
@@ -197,7 +309,7 @@ public class TrainingTestTrecCovid {
 	    }
 
 	    for (int i = 0; i < cut; i++) {
-	        Document documento = indexReader.document(topDocs.scoreDocs[i].doc);
+	        Document documento = indexReader.storedFields().document(topDocs.scoreDocs[i].doc);
 	        String documentId = documento.getValues("id")[0];
 	        if (relevantIds.contains(documentId)) {
 	            relevantes++;
@@ -230,29 +342,12 @@ public class TrainingTestTrecCovid {
 	}
 
 	
-    
-    
-    private static List<Query> selectQueries(int start, int end) throws IOException {
-    	var is = IndexTreeCovid.class.getResourceAsStream( "/trec-covid/queries.jsonl");
-        ObjectReader reader = JsonMapper.builder().findAndAddModules().build()
-                .readerFor(Query.class);
-        
-        List<Query> queries = reader.<Query>readValues(is).readAll();
-    	
-    		List<Query> selection = new ArrayList<Query>();
-    		for (int i = start; i<= end; i++) {
-    			selection.add(queries.get(i));
-    		}
-    		return selection;
-    }
-    	
-
 
     
     private static List<Judgments> loadJudgments(int id) throws IOException {
         
         
-        var is = IndexTreeCovid.class.getResourceAsStream( "/trec-covid/qrels/test.tsv");	        
+        var is = IndexTrecCovid.class.getResourceAsStream( "/trec-covid/qrels/test.tsv");	        
         List<Judgments>jmts = new ArrayList<Judgments>();
         
         try (Scanner scanner = new Scanner(is)) {
@@ -283,20 +378,18 @@ public class TrainingTestTrecCovid {
     private static void escribirResultados(String tipo, Map<Double, Double> resultados, String metrica) throws IOException {
         String nombreArchivo = "TREC-COVID." + tipo + "." + metrica + ".csv";
 
-        try (BufferedWriter writer = Files.newBufferedWriter(Paths.get(nombreArchivo), StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.APPEND)) {
-            // Escribir encabezado si el archivo está vacío
-            if (Files.size(Paths.get(nombreArchivo)) == 0) {
-                writer.write("Lambda/K1," + metrica);
-                writer.newLine();
-            }
-
-            // Escribir los resultados en el archivo
-            for (Map.Entry<Double, Double> entry : resultados.entrySet()) {
-                writer.write(entry.getKey() + "," + entry.getValue());
-                writer.newLine();
-            }
+        char delimitador = ','; // Coma como delimitador
+	    char quotechar = '"';    // Carácter de comillas
+	    char escapechar = '\\';  // Carácter de escape
+	    String lineEnd = "\n";   // Terminador de línea
+	    try (CSVWriter writer = new CSVWriter(new FileWriter(nombreArchivo, true), delimitador, quotechar, escapechar, lineEnd)) {
+	        //to do pendiente de revisar
+	//    	writer.writeNext(resultados, false);
+	    } catch (IOException e) {
+	        System.out.println("Impossible to write on file");
+	    }
         }
-    }
+ 
 
     private static void escribirResultadoTest(String tipo, double lambdaOptimo, double metricaValor, String metrica) throws IOException {
         String nombreArchivo = "TREC-COVID." + tipo + ".test." + metrica + ".csv";
@@ -377,5 +470,7 @@ public class TrainingTestTrecCovid {
         return ""; 
     }
 }
+	    
+
 	    
 
