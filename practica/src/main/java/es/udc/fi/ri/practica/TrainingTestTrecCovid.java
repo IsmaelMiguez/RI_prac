@@ -115,13 +115,13 @@ public class TrainingTestTrecCovid {
         	 arg.add("jm");
         	 arg2.add("jm");
         	 HashMap<Double, HashMap<String, Double>> resultadosEntrenamiento = probarHiperparametros(arg, evaljm, metrica) ;
-             String prom = escribirResultados("jm.training." + p+".test."+q+"."+metrica+cut+".trainig.csv", resultadosEntrenamiento, evaljm, int1, int2);
+             String prom = escribirResultados("target/classes/jm.training." + p+".test."+q+"."+metrica+cut+".trainig.csv", resultadosEntrenamiento, evaljm, int1, int2);
              arg2.add(prom);
              SearchEvalTrecCovid.main(arg2.toArray(new String[11]));
              String path= "TREC-COVID."+arg2.get(9)+"."+arg2.get(5)+".hits.lambda."+prom+".q."+arg2.get(3)+".csv";
              List<Estadisticos> st = readStat(path);
              HashMap<String, Double> resultadosTest = writeStat(metrica,st);
-             escribirResultados2("jm.training." + p+".test."+q+"."+metrica+cut+".test.csv", resultadosTest, metrica, prom , int3, int4);
+             escribirResultados2("target/classes/jm.training." + p+".test."+q+"."+metrica+cut+".test.csv", resultadosTest, metrica, prom , int3, int4);
               
         	
         } else if (evalbm25) {
@@ -130,13 +130,13 @@ public class TrainingTestTrecCovid {
         	 arg2.add("bm25");
         	 
         	 HashMap<Double, HashMap<String, Double>> resultadosEntrenamiento = probarHiperparametros(arg, evaljm, metrica) ;
-             String prom = escribirResultados("bm25.training." + p+".test."+q+"."+metrica+cut+".trainig.csv", resultadosEntrenamiento, evaljm, int1, int2);
+             String prom = escribirResultados("target/classes/bm25.training." + p+".test."+q+"."+metrica+cut+".trainig.csv", resultadosEntrenamiento, evaljm, int1, int2);
               arg2.add(prom);
               SearchEvalTrecCovid.main(arg2.toArray(new String[11]));              
               String path= "TREC-COVID."+arg2.get(9)+"."+arg2.get(5)+".hits.k1."+prom+".q."+arg2.get(3)+".csv";
               List<Estadisticos> st = readStat(path);
               HashMap<String, Double> resultadosTest = writeStat(metrica,st);
-              escribirResultados2("bm25.training." + p+".test."+q+"."+metrica+cut+".test.csv", resultadosTest, metrica, prom , int3, int4);
+              escribirResultados2("target/classes/bm25.training." + p+".test."+q+"."+metrica+cut+".test.csv", resultadosTest, metrica, prom , int3, int4);
               
         	  
         } else {
@@ -371,5 +371,5 @@ private static void escribirResultados2(String nombreArchivo,  HashMap<String, D
   	        }
     
 }
-	  
+	    
 
