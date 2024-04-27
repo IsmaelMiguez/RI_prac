@@ -29,7 +29,6 @@ public class TrainingTestTrecCovid {
 		Integer cut = 0;
 		String metrica = null;
 		
-		
 	    String usage =
 	        "TrainingTestTrecCovid"
 	            + " [-index INDEX_PATH] [-evaljm | -evalbm25] [-cut CUT_MODE] [-metrica METRICA_MODE] \n\n";
@@ -115,26 +114,35 @@ public class TrainingTestTrecCovid {
         	
         	 arg.add("jm");
         	 arg2.add("jm");
-        	 
+        	 HashMap<Double, HashMap<String, Double>> resultadosEntrenamiento = probarHiperparametros(arg, evaljm, metrica) ;
+             String prom = escribirResultados("jm.training." + p+".test."+q+"."+metrica+cut+".trainig.csv", resultadosEntrenamiento, evaljm, int1, int2);
+             arg2.add(prom);
+             SearchEvalTrecCovid.main(arg2.toArray(new String[11]));
+             String path= "TREC-COVID."+arg2.get(9)+"."+arg2.get(5)+".hits.lambda."+prom+".q."+arg2.get(3)+".csv";
+             List<Estadisticos> st = readStat(path);
+             HashMap<String, Double> resultadosTest = writeStat(metrica,st);
+             escribirResultados2("jm.training." + p+".test."+q+"."+metrica+cut+".test.csv", resultadosTest, metrica, prom , int3, int4);
+              
         	
         } else if (evalbm25) {
         	//crear el string de los argumentos
         	 arg.add("bm25");
         	 arg2.add("bm25");
-        	
+        	 
+        	 HashMap<Double, HashMap<String, Double>> resultadosEntrenamiento = probarHiperparametros(arg, evaljm, metrica) ;
+             String prom = escribirResultados("bm25.training." + p+".test."+q+"."+metrica+cut+".trainig.csv", resultadosEntrenamiento, evaljm, int1, int2);
+              arg2.add(prom);
+              SearchEvalTrecCovid.main(arg2.toArray(new String[11]));              
+              String path= "TREC-COVID."+arg2.get(9)+"."+arg2.get(5)+".hits.k1."+prom+".q."+arg2.get(3)+".csv";
+              List<Estadisticos> st = readStat(path);
+              HashMap<String, Double> resultadosTest = writeStat(metrica,st);
+              escribirResultados2("bm25.training." + p+".test."+q+"."+metrica+cut+".test.csv", resultadosTest, metrica, prom , int3, int4);
+              
         	  
         } else {
             System.err.println("Please specify either -evaljm or -evalbm25");
             System.exit(1);
         }
-        
-        HashMap<Double, HashMap<String, Double>> resultadosEntrenamiento = probarHiperparametros(arg, evaljm, metrica) ;
-       
-        List<Double> prom = escribirResultados("jm.training." + p+".test."+q+"."+metrica+cut+".trainig.csv", resultadosEntrenamiento, evaljm, int1, int2);
-    
-        
-        // HashMap<Double, HashMap<String, Double>> resultadosPrueba = probarHiperparametros(arg2,evaljm, metrica);
-        //to do, extraer del Hashmap los valores mas altos.
     }
     
 	
@@ -237,7 +245,7 @@ public class TrainingTestTrecCovid {
 
     
 
-    private static List<Double> escribirResultados(String nombreArchivo, HashMap<Double, HashMap<String, Double>> resultadosEntrenamiento, boolean jm, int start, int end) throws IOException {
+    private static String escribirResultados(String nombreArchivo, HashMap<Double, HashMap<String, Double>> resultadosEntrenamiento, boolean jm, int start, int end) throws IOException {
         
 
         char delimitador = ','; // Coma como delimitador
@@ -246,6 +254,9 @@ public class TrainingTestTrecCovid {
   		    String lineEnd = "\n";   // Terminador de línea
   		    List<Double> toFill= new ArrayList<Double>();
   		    List<Double> prom= new ArrayList<Double>();
+  		    double max= 0;
+    		String toReturn= "";
+  		    
   		    try (CSVWriter writer = new CSVWriter(new FileWriter(nombreArchivo, true), delimitador, quotechar, escapechar, lineEnd)) {
   		    	if(jm) {
   		    		String [] line = {"Query", "0.001", "0.1", "0.2", "0.3","0.4","0.5","0.6","0.7","0.8","0.9","1.0"};
@@ -257,7 +268,12 @@ public class TrainingTestTrecCovid {
   		    				for (String s : aux) {
   		    					toFill.add(resultadosEntrenamiento.get(Double.valueOf(s)).get(String.valueOf(i)));
   		    						if(i==end) {
-  		    							prom.add(resultadosEntrenamiento.get(Double.valueOf(s)).get("promedios"));
+  		    							double now= resultadosEntrenamiento.get(Double.valueOf(s)).get("promedios");
+  		    							prom.add(now);
+  		    							if(now > max) {
+  		    								max = now;
+  		    								toReturn = s;
+  		    							}
   		    						}
   		    					}
   		    				String[] lin;
@@ -278,7 +294,7 @@ public class TrainingTestTrecCovid {
   		    		String[] aux = {"0.4", "0.6", "0.8", "1.0","1.2","1.4","1.6","1.8","2.0"} ;
   		    		for( int i = start; i<=end; i++) {
 		    				for (String s : aux) {
-		    					toFill.add(resultadosEntrenamiento.get(Double.valueOf(s)).get(i));
+		    					toFill.add(resultadosEntrenamiento.get(Double.valueOf(s)).get(String.valueOf(i)));
 		    					if(i==end) {
 		    							prom.add(resultadosEntrenamiento.get(Double.valueOf(s)).get("promedios"));
 		    						}
@@ -308,7 +324,7 @@ public class TrainingTestTrecCovid {
   		        System.out.println("Impossible to write on file");
   		    }
   		    
-  		    return prom;
+  		    return toReturn;
   	        }
     
     
@@ -322,6 +338,38 @@ public class TrainingTestTrecCovid {
 		return result;
     	
     }
+    
+    
+    
+private static void escribirResultados2(String nombreArchivo,  HashMap<String, Double> resultadosEntrenamiento,String metrica , String lambda, int start, int end) throws IOException {
+        
+
+			char delimitador = ','; // Coma como delimitador
+  		    char quotechar = '"';    // Carácter de comillas
+  		    char escapechar = '\\';  // Carácter de escape
+  		    String lineEnd = "\n";   // Terminador de línea
+  		
+		    
+  		    try (CSVWriter writer = new CSVWriter(new FileWriter(nombreArchivo, true), delimitador, quotechar, escapechar, lineEnd)) {
+  		    		String[] a ={lambda, metrica};
+  		    		writer.writeNext(a , false);
+  		    
+  		    	for( int i = start; i<=end; i++) {
+    				
+    				String[] lin = {String.valueOf(i),String.valueOf(resultadosEntrenamiento.get(String.valueOf(i)))};
+					writer.writeNext(lin , false);
+
+  		    	}
+  		    	String[] lin = {"promedios",String.valueOf(resultadosEntrenamiento.get(String.valueOf("promedios")))};
+				writer.writeNext(lin , false);
+  		    	
+  		    	
+  		    } catch (IOException e) {
+  		        System.out.println("Impossible to write on file");
+  		    }
+  		    
+  	        }
+    
 }
-	    
+	  
 
