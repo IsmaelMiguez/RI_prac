@@ -65,11 +65,11 @@ public static void main(String[] args) throws Exception {
 	          p = args[++i];
 	          q = args[++i];
 	          String[] queries11 = p.split("-");
-	          int1 =Integer.valueOf( queries11[0])-1;
-	          int2 = Integer.valueOf( queries11[1])-1;
+	          int1 =Integer.valueOf( queries11[0]);
+	          int2 = Integer.valueOf( queries11[1]);
 	          String[] queries21 = q.split("-");
-	          int3 =Integer.valueOf( queries21[0])-1;
-	          int4 = Integer.valueOf( queries21[1])-1;
+	          int3 =Integer.valueOf( queries21[0]);
+	          int4 = Integer.valueOf( queries21[1]);
 	      break;	          
 	    case "-cut":
 	    	cut = Integer.valueOf(args[++i]);
@@ -78,7 +78,7 @@ public static void main(String[] args) throws Exception {
 	    	metrica = args[++i];
 	    	break;
 	    default:
-	      throw new IllegalArgumentException("unknown parameter " + args[++i]);
+	      throw new IllegalArgumentException("unknown parameter " + args[i]);
 	  }
 	}
 	
@@ -318,7 +318,12 @@ private static String escribirResultados(String nombreArchivo, HashMap<Double, H
     				for (String s : aux) {
     					toFill.add(resultadosEntrenamiento.get(Double.valueOf(s)).get(String.valueOf(i)));
     					if(i==end) {
-    							prom.add(resultadosEntrenamiento.get(Double.valueOf(s)).get("promedios"));
+    						double now= resultadosEntrenamiento.get(Double.valueOf(s)).get("promedios");
+							prom.add(now);
+    							if(now > max) {
+    								max = now;
+    								toReturn = s;
+    							}
     						}
     					}
     				String[] lin;

@@ -1,10 +1,12 @@
 package es.udc.fi.ri.practica;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.io.BufferedReader;
 import java.io.FileReader;
 
-import org.apache.commons.math3.stat.inference.TestUtils;
+import org.apache.commons.math3.stat.inference.TTest;
 import org.apache.commons.math3.stat.inference.WilcoxonSignedRankTest;
 import org.apache.lucene.queryparser.classic.ParseException;
 
@@ -26,7 +28,7 @@ public class compare {
 			
 			Boolean tTest = false;
 			Boolean wilcoxon = false; 
-			Integer alpha = 0;
+			Double alpha = 0.;
 			String results1= null;
 			String results2= null;
 			
@@ -36,15 +38,15 @@ public class compare {
 		      switch (args[i]) {
 		        case "-tTest":
 		        	tTest = true;
-		        	alpha = Integer.valueOf(args[++i]);
+		        	alpha = Double.valueOf(args[++i]);
 		          break;
 		        case "-wilcoxon":
 		        	wilcoxon = true;
-		        	alpha = Integer.valueOf(args[++i]);
+		        	alpha = Double.valueOf(args[++i]);
 		          break;
 		        case "-results":
 		          results1 = args[++i];
-		          results2 = args[i+2];
+		          results2 = args[++i];
 		          break;
 		        default:
 		          throw new IllegalArgumentException("unknown parameter " + args[i]);
@@ -66,42 +68,55 @@ public class compare {
 	        // Leer los resultados
 	        double[] model1Results = readResults(results1);
 	        double[] model2Results = readResults(results2);
-
 	        // Se hacen los test pertinentes
 	        if (tTest) {
 	            performTTest(model1Results, model2Results, alpha);
 	        } else {
-	            performWilcoxonTest(model1Results, model2Results, alpha);
+	           performWilcoxonTest(model1Results, model2Results, alpha);
 	        }
 	    }
 
 	    private static double[] readResults(String fileName) throws IOException {
-	        BufferedReader reader = new BufferedReader(new FileReader(fileName));
-	        String line;
-	        int count = 0;
-	        while ((line = reader.readLine()) != null) {
-	            count++;
+	    	ArrayList<Double> stats = new ArrayList<Double>();
+	    	int i=0;
+	    	 BufferedReader reader = new BufferedReader(new FileReader(fileName));
+		        String line;
+		        while ((line = reader.readLine()) != null) {          	     
+	    	        String[] parts = line.split(",");
+	    	        if (!(parts[1].compareToIgnoreCase("promedios")==0)&&
+	    	        		!(parts[1].compareToIgnoreCase("P@N")==0)&&
+	    	        		!(parts[1].compareToIgnoreCase("Recall@N")==0)&&	
+	    	        		!(parts[1].compareToIgnoreCase("MAP@N")==0)&&
+	    	        		!(parts[1].compareToIgnoreCase("MRR")==0)
+	    	        		
+	    	        		) {
+	                   	stats.add(i++, Double.valueOf(parts[1]));
+	    		    }
+	    	    }
+	    	    
+		        reader.close();
+		        
+	    	    return toArr(stats);
+	    	       
+	    	   	}
+	    
+	    
+	    
+	    private static double[] toArr(List<Double> toFill ) {
+	    	double[] result = new double[toFill.size()];
+	    	
+	        for (int i = 0; i < toFill.size(); i++) {
+	            result[i] = toFill.get(i);
 	        }
-	        reader.close();
-
-	        double[] results = new double[count - 1]; 
-	        reader = new BufferedReader(new FileReader(fileName));
-	        reader.readLine(); 
-	        int i = 0;
-	        while ((line = reader.readLine()) != null) {
-	            String[] parts = line.split(",");
-	            results[i++] = Double.parseDouble(parts[1]); 
-	        }
-	        reader.close();
-
-	        return results;
+			return result;
+	    	
 	    }
-
-	    private static void performTTest(double[] model1Results, double[] model2Results, double alpha) {
-	        double pValue = TestUtils.tTest(model1Results, model2Results);
-	        System.out.println("T-Test Result:");
-	        System.out.println("p-value: " + pValue);
-	        if (pValue < alpha) {
+//revisar que la respuesta es la correcta en cada caso
+	    private static void performTTest(double[] objects, double[] objects2, double alpha) {
+	    	TTest tTest = new TTest();
+	    	boolean pValue = tTest.pairedTTest(objects, objects2, alpha);
+	        System.out.println("T-Test Result:");;
+	        if (pValue) {
 	            System.out.println("Reject null hypothesis: There is a significant difference between the models.");
 	        } else {
 	            System.out.println("Fail to reject null hypothesis: There is no significant difference between the models.");
