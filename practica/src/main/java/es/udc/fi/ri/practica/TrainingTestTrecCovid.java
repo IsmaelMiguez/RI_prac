@@ -252,7 +252,8 @@ try (Scanner scanner = new Scanner(is)) {
                     double MRR =   Double.parseDouble(parts[4]);;
                     stats.add( new Estadisticos(query,PN, RecallN, MAPN, MRR));
                 }
-            }}
+            }
+        }
             return stats;
        
    	}

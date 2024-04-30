@@ -31,6 +31,8 @@ import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.opencsv.CSVWriter;
 
 public class SearchEvalTrecCovid {
+private static String usage = null;
+
 /**
  * Funcion principal de la clase que ejecuta la busqueda
  * @param args
@@ -39,7 +41,7 @@ public class SearchEvalTrecCovid {
  */
 	 public static void main(String[] args) throws IOException, ParseException {
 		//string the ayuda en caso de fallo
-		    String usage =
+		   usage =
 		        "SearchEvalTreeCovid"
 		            + "  [-index INDEX_PATH] [-search jm <lambda> | bm25 <k1>][-cut n] [-top topN] [-queries  all | <int1> | <int1-int2> ] \n";
 			
@@ -202,6 +204,11 @@ public class SearchEvalTrecCovid {
 	                .readerFor(Query.class);
 	        
 	        List<Query> queries = reader.<Query>readValues(is).readAll();
+	        int aux = queries.size();
+	        if(start>aux || end >aux) {
+	        	  System.err.println("Queries out of range \n Usage: " + usage);
+			      System.exit(1);
+	        }
 	    	
 	    	if(all) {
 	    		 return queries;
